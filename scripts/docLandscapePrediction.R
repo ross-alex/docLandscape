@@ -4,64 +4,15 @@
 library(tidyverse)
 library(here)
 library(lubridate)
+library(MuMIn)
 
 ## Read Data ####
-
-## BsM ##
-## lake productivity and chemistry ##
-#-----------------------------------------#
-bsmChemRaw <- read_csv(here("data","waterChem_bsm.csv"))
-  
-## lake variables (class, size, etc.) ##
-bsmLakes <- read_csv(here("data","waterbodyAndBathymetry_bsm_20220421.csv")) %>% 
-  select(waterbodyID,surfaceArea,lakeVolume,maxDepth,meanDepth,lat,long) %>% 
-  distinct() 
-
-## ARU database ##
-aruDat <- read_csv(here("data","ontarioAquaticHabitatInventory_oldData.csv")) %>% 
-  mutate(latD = as.numeric(substr(LATITUDE,1,2)),
-         latM = as.numeric(substr(LATITUDE,3,4)),
-         latS = as.numeric(substr(LATITUDE,5,6)),
-         latDirection = "N",
-         lonD = as.numeric(substr(LONGITUDE,1,2)),
-         lonM = as.numeric(substr(LONGITUDE,3,4)),
-         lonS = as.numeric(substr(LONGITUDE,5,6)),
-         lonDirection = "W") %>% 
-  mutate(latARU = convert_dms_to_dd(latD, latM, latS, latDirection),
-         longARU = convert_dms_to_dd(lonD, lonM, lonS, lonDirection)) %>%  #Convert DMS to dd.dd
-  select(-c(latD,latM,latS,lonD,lonM,lonS))
-  
-## Data manipulation + primary visualizations ####
-bsmDat <- bsmChemRaw %>% 
-  mutate(yearSample = as.numeric(year(dateSample)),
-         monthSample = as.numeric(month(dateSample)),
-         daySample = as.numeric(day(dateSample)),
-         FMZ = as.factor(FMZ)) %>% 
-  rename(predictorVariable = chemistryVariable, predictorValue= chemistryValue)
-
-bsmMorphoDat <- bsmChemRaw %>% 
-  select(waterbodyID,secchiDepth) %>% 
-  group_by(waterbodyID) %>% 
-  summarise(secchiDepth = mean(secchiDepth)) %>% 
-  inner_join(bsmLakes, by="waterbodyID") %>% 
-  pivot_longer(-c(waterbodyID,secchiDepth), names_to = "predictorVariable", values_to = "predictorValue") 
-
-bsmNutRatio <- bsmChemRaw %>% 
-  select(waterbodyID, dateSample,secchiDepth,chemistryVariable,chemistryValue,BsM_Cycle,FMZ,lakeName) %>% 
-  filter(chemistryVariable %in% c("TDP","NNTKUR (ug/L)")) %>% 
-  pivot_wider(values_from = chemistryValue,names_from = chemistryVariable, values_fn = mean) %>% 
-  mutate(NtoPratio = log(`NNTKUR (ug/L)`+0.1)/log(TDP+0.1),
-         FMZ = as.factor(FMZ),
-         yearSample = as.numeric(year(dateSample))) %>% 
-  filter_if(is.numeric, ~. > 0 & . < Inf) %>%  #filter out instances where 0 or infinity are calculated because numerator/denominator missing
-  select(-`NNTKUR (ug/L)`, -TDP) %>% 
-  pivot_longer(NtoPratio, names_to = "predictorVariable", values_to = "predictorValue") 
-
-cor.test(bsmNutRatio$secchiDepth,bsmNutRatio$predictorValue) #highly significant cor
-modNut <- lm(predictorValue~secchiDepth, data=bsmNutRatio)
-summary(modNut) #singificant but low R2
-
-allBsm <- bind_rows(bsmDat,bsmMorphoDat,bsmNutRatio) 
+allBsm <- read_csv(here("data","BsM_modelData_20240311.csv"))
+allARU <- read_csv(here("data","ARU_modelData_20240311.csv"))
+statDat_wide <- read_csv(here("data","BsM_WideSampleModelData_20240311.csv")) #This dataset is slightly reduced
+                                                                              #to remove all rows that had at 
+                                                                              #at least one NA. See 'modelData_assembly_20240311.R'
+                                                                              # script for details (bottom chunk)
 
 ## Exploratory plots - what correlates with secchi depth
 pRough_allVars <- ggplot(allBsm) +
@@ -95,42 +46,17 @@ pDOCresp_log
 # Again, DOC, TDP, NNTKUR, depth and Colour look like important independent predictors of DOC
 
 ## Goal 1: What is the best predictive DOC model using contemporary data ####
-## Transform data for stats ##
-statDat_prim <- allBsm %>% 
-  select(BsM_Cycle,FMZ,waterbodyID,lakeName,predictorVariable,predictorValue,dateSample,yearSample)
-statDat_long <- bsmChemRaw_expl %>% #Need to join secchi depth
-  select(BsM_Cycle,FMZ,waterbodyID,lakeName,dateSample,yearSample,secchiDepth) %>% 
-  distinct() %>% 
-  pivot_longer(secchiDepth, names_to = "predictorVariable", values_to = "predictorValue") %>% 
-  bind_rows(statDat_prim)  
-statDat_wide <-  statDat_long %>% 
-  pivot_wider(names_from = predictorVariable, values_from = predictorValue,
-              values_fn = mean) %>%  #in cases where duplicate chem values exist, take mean
-  left_join(bsmLakes, by="waterbodyID") %>% 
-  mutate(lat = if_else(is.na(lat.x), lat.y, lat.x),
-         long = if_else(is.na(long.x), long.y, long.x),
-         maxDepth = if_else(is.na(maxDepth.x), maxDepth.y, maxDepth.x),
-         meanDepth = if_else(is.na(meanDepth.x), meanDepth.y, meanDepth.x),
-         surfaceArea = if_else(is.na(surfaceArea.x), surfaceArea.y, surfaceArea.x),
-         lakeVolume = if_else(is.na(lakeVolume.x), lakeVolume.y, lakeVolume.x)) %>% 
-  select(-lat.x, -lat.y, -long.x, -long.y, -maxDepth.y, -maxDepth.x, -meanDepth.y, -meanDepth.x,
-         -surfaceArea.y, -surfaceArea.x, -lakeVolume.y, -lakeVolume.x) %>% 
-  rename(TKN = `NNTKUR (ug/L)`) %>% 
-  filter(!is.na(DOC) & 
-         !is.na(secchiDepth) &
-         !is.na(TDP) & 
-         !is.na(maxDepth) & 
-         !is.na(DOC) & 
-         !is.na(TKN),
-         !is.na(NtoPratio)) # Need to remove NAs from predictor variables
-statDat_wide1 <- statDat_wide[-c(1480,102,257),] #From initial modeling, these points represent outliers
 
-# What duplicates exist in waterbodyID?
-duplicates <- statDat_wide %>%
-  filter(duplicated(waterbodyID) | duplicated(waterbodyID, fromLast = TRUE))
+# Do outliers need to be removed? Look at model diagnostics and filter accordingly
+#statDat_wide_outliersRemoved <- statDat_wide[-c(1480,102,257),] #From initial linear modeling, these points represent clear outliers (orders of magnitude different then next highest values)
+
+# What duplicates exist in waterbodyID? This dataframe can be used for assessing DOC change over course of contemporary data
+duplicateSamples <- statDat_wide %>%
+  filter(duplicated(waterbodyID) | duplicated(waterbodyID, fromLast = TRUE)) %>% 
+  arrange(waterbodyID)
 
 #Make stat data but with means across different BsM cycles
-statDat_means <- statDat_wide1 %>%
+statDat_means <- statDat_wide %>%
   group_by(waterbodyID,) %>% 
   select(-BsM_Cycle, -dateSample, -yearSample) %>%
   summarise_all(mean, na.rm = TRUE)
