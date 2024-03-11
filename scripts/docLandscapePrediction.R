@@ -9,8 +9,8 @@ library(MuMIn)
 ## Read Data ####
 allBsm <- read_csv(here("data","BsM_modelData_20240311.csv"))
 allARU <- read_csv(here("data","ARU_modelData_20240311.csv"))
-statDat_wide <- read_csv(here("data","BsM_WideSampleModelData_20240311.csv")) #This dataset is slightly reduced
-                                                                              #to remove all rows that had at 
+statDat_wide <- read_csv(here("data","BsM_WideSampleModelData_20240311.csv")) %>% #This dataset is slightly reduced
+                  filter(log(TKN) >4) #outliers <4                            #to remove all rows that had at 
                                                                               #at least one NA. See 'modelData_assembly_20240311.R'
                                                                               # script for details (bottom chunk)
 
@@ -48,7 +48,9 @@ pDOCresp_log
 ## Goal 1: What is the best predictive DOC model using contemporary data ####
 
 # Do outliers need to be removed? Look at model diagnostics and filter accordingly
-#statDat_wide_outliersRemoved <- statDat_wide[-c(1480,102,257),] #From initial linear modeling, these points represent clear outliers (orders of magnitude different then next highest values)
+
+#statDat_wide_outliersRemoved <- statDat_wide[-c(681,901,698,662,767),] #From initial linear modeling of 4-way interaction,
+# these points represent clear outliers (orders of magnitude different then next highest values)
 
 # What duplicates exist in waterbodyID? This dataframe can be used for assessing DOC change over course of contemporary data
 duplicateSamples <- statDat_wide %>%
@@ -57,6 +59,7 @@ duplicateSamples <- statDat_wide %>%
 
 #Make stat data but with means across different BsM cycles
 statDat_means <- statDat_wide %>%
+#statDat_means <- statDat_wide_outliersRemoved %>%
   group_by(waterbodyID,) %>% 
   select(-BsM_Cycle, -dateSample, -yearSample) %>%
   summarise_all(mean, na.rm = TRUE)
@@ -129,7 +132,7 @@ car::vif(addMod_3)
 aruVarsMod <- lm(log(DOC)~secchiDepth*maxDepth, data=statDat_means, na.action = "na.fail")
 aruVarsSel <- dredge(aruVarsMod) #interaction is important
 
-aruVars_finalMod <- lm(log(DOC)~secchiDepth*maxDepth, data=statDat_means)
+aruVars_finalMod <- lm(log(DOC)~secchiDepth+maxDepth, data=statDat_means)
 plot(aruVars_finalMod)
 summary(aruVars_finalMod)
 car::vif(aruVars_finalMod) #interaction still kind of high (8.14)
