@@ -14,7 +14,8 @@ statDat_wide <- read_csv(here("data","BsM_WideSampleModelData_20240311.csv")) %>
                                                                               #at least one NA. See 'modelData_assembly_20240311.R'
                                                                               # script for details (bottom chunk)
 
-## Exploratory plots - what correlates with secchi depth
+## Exploratory plots ####
+# what correlates with secchi depth
 pRough_allVars <- ggplot(allBsm) +
   geom_point(aes(x=secchiDepth,y=predictorValue), alpha = 0.3)+
   facet_wrap(~predictorVariable, scales = "free")
@@ -44,6 +45,89 @@ pDOCresp_log <- ggplot(docRespDat) +
   facet_wrap(~predictorVariable, scales = "free")
 pDOCresp_log
 # Again, DOC, TDP, NNTKUR, depth and Colour look like important independent predictors of DOC
+
+## Goal 1: Predicting historical DOC ####
+## The ARU database has secchi and depth, which can be used to predict DOC. 
+# A regression can be applied to BsM data where DOC is known, and the parameters from this model can
+# then be applied to the ARU database
+
+#### DOC Prediction Model
+## Make dataframe using mean values across different BsM cycles
+statDat_means <- statDat_wide %>%
+  group_by(waterbodyID) %>% 
+  select(-BsM_Cycle, -dateSample, -yearSample) %>%
+  summarise_all(mean, na.rm = TRUE)
+
+## Look at distribution of DOC observations; what distribution is most appropriate
+# Linear
+plot_DOCdensity <- ggplot(data = statDat_means) +
+  geom_density(aes(x=DOC), fill="grey", alpha = 0.7) +
+  theme_bw()
+plot_DOCdensity #right skew
+
+# log-linear
+plot_DOCdensity_log <- plot_DOCdensity +
+  scale_x_continuous(trans = "log")
+plot_DOCdensity_log #left skew
+
+# gamma distribution
+# Fit gamma distribution to the observed data
+fit <- fitdistr(statDat_means$DOC, densfun = "gamma")
+
+# Visualize the fit
+ggplot(statDat_means, aes(x = DOC)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "skyblue", color = "black", alpha = 0.7) +
+  stat_function(fun = dgamma, args = list(shape = fit$estimate["shape"], rate = fit$estimate["rate"]), color = "red", size = 1) +
+  labs(x = "DOC", y = "Density") +
+  ggtitle("Gamma Distribution Fit to Data") 
+# gamma fits well with shape = 4.52, rate = 0.60
+
+## Model ARU data using GLM, gamma distribution
+# Step 1: Fit the initial model
+ARUmod_gamma <- glm(DOC ~ secchiDepth * maxDepth, data = statDat_means, family = Gamma(link = "log"), na.action = "na.fail")
+ARUmodSel <- dredge(ARUmod_gamma) #interaction is best model
+
+ARUmod_gammaBest <- ARUmod_gamma
+
+# Step 2: Model diagnostics
+plot(ARUmod_gammaBest)
+
+# Step 3: Model summaries
+summary(ARUmod_gammaBest)
+# Calculate deviance
+model_deviance <- deviance(ARUmod_gammaBest)
+# Calculate Pearson residuals
+pearson_residuals <- residuals(ARUmod_gammaBest, type = "pearson")
+# Conduct Hosmer-Lemeshow test
+hoslem_test <- ResourceSelection::hoslem.test(fitted(ARUmod_gammaBest), statDat_means$DOC)
+# Calculate variance partitioning (eta-squared)
+# Calculate total variance
+total_variance <- sum((statDat_means$DOC - mean(statDat_means$DOC))^2)
+# Calculate variance explained by the model
+model_variance <- sum((fitted(ARUmod_gammaBest) - mean(statDat_means$DOC))^2)
+# Calculate eta-squared
+eta_squared <- model_variance / total_variance
+
+
+# Using BsM data, assess model AIC to estimate DOC in ARU database
+aruVarsMod <- lm(log(DOC)~secchiDepth*maxDepth, data=statDat_means, na.action = "na.fail")
+aruVarsSel <- dredge(aruVarsMod) #interaction is important
+
+aruVars_finalMod <- lm(log(DOC)~secchiDepth+maxDepth, data=statDat_means)
+plot(aruVars_finalMod)
+summary(aruVars_finalMod)
+car::vif(aruVars_finalMod) #interaction still kind of high (8.14)
+
+
+## BsM DOC and secchi depth over time
+
+
+
+
+
+
+
+
 
 ## Goal 1: What is the best predictive DOC model using contemporary data ####
 
