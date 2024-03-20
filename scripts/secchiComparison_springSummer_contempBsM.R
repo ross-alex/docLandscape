@@ -59,3 +59,4 @@ boxplot(secDat_reduced$springSecchi,secDat_reduced$summerSecchi, names = c("Spri
         ylab="Secchi Depth", las = 1)
 
 ## Same results; significant test and same mean difference (0.32 compared to 0.33)
+# in summer predictions?)
