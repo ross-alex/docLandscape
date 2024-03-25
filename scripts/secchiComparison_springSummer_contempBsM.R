@@ -22,7 +22,7 @@ secDat_complete <- secDat %>%
 # T-test between spring and summer secchi's
 secTest <- t.test(secDat_complete$springSecchi,secDat_complete$summerSecchi)
 secTest
-dim(secDat_complete)
+`dim(secDat_complete)
 
 # Visualize data, boxplot
 boxplot(secDat_complete$springSecchi,secDat_complete$summerSecchi, names = c("Spring","Summer"),
@@ -30,7 +30,8 @@ boxplot(secDat_complete$springSecchi,secDat_complete$summerSecchi, names = c("Sp
 
 # Summer secchi's are slightly higher (mean spring = 3.37, mean summer = 3.7), so lakes appear clearer during the summer
 # We could add a correction factor to ARU Secchi's (add 0.33cm to BsM data to translate spring model data for use
-# in summer predictions?)
+# in summer predictions?). 
+#** Should actually correct ARU "summer" data to "spring" data if a correction is to be made (remove 33cm)
 
 # It should be noted, these are for ALL BsM lakes, and have not been filtered to the model data
 
