@@ -22,7 +22,7 @@ secDat_complete <- secDat %>%
 # T-test between spring and summer secchi's
 secTest <- t.test(secDat_complete$springSecchi,secDat_complete$summerSecchi)
 secTest
-`dim(secDat_complete)
+dim(secDat_complete)
 
 # Visualize data, boxplot
 boxplot(secDat_complete$springSecchi,secDat_complete$summerSecchi, names = c("Spring","Summer"),

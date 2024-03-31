@@ -7,6 +7,8 @@ library(lubridate)
 library(MuMIn)
 library(lme4)
 library(lmerTest)
+library(scales)
+library(sf)
 
 ## Read Data ####
 allBsm <- read_csv(here("data","BsM_modelData_20240311.csv"))
@@ -67,12 +69,12 @@ docRespDat <- allBsm %>%
 pDOCresp <- ggplot(docRespDat) +
   geom_point(aes(y=DOC,x=(predictorValue)), alpha = 0.3)+
   facet_wrap(~predictorVariable, scales = "free")
-pDOCresp
+pDOCresp #To deal with wonky DOC~DOC relationship (and some var. in other variables) need to take mean of multiple observations per waterbodyID. Variation shows change b/w sampling events from the same lake
 
 pDOCresp_log <- ggplot(docRespDat) +
-  geom_point(aes(y=log(DOC),x=log(predictorValue)), alpha = 0.3)+
+  geom_point(aes(y=log(TDP),x=log(predictorValue)), alpha = 0.3)+
   facet_wrap(~predictorVariable, scales = "free")
-pDOCresp_log
+pDOCresp_log #To deal with wonky DOC~DOC relationship (and some var. in other variables) need to take mean of multiple observations per waterbodyID. Variation shows change b/w sampling events from the same lake
 # Again, DOC, TDP, NNTKUR, depth and Colour look like important independent predictors of DOC
 
 ## Goal 1: Checking for differences in water clarity; Predicting historical DOC; model selection ####
@@ -85,9 +87,17 @@ pDOCresp_log
 ## Make dataframe using mean values across different BsM cycles
 statDat_means <- statDat_wide %>%
   group_by(waterbodyID) %>% 
-  select(-BsM_Cycle, -dateSample, -yearSample) %>%
+  select(-BsM_Cycle, -dateSample) %>%
   summarise_all(mean, na.rm = TRUE) %>% 
-  left_join(select(combIDs, bsmWaterbodyID,commonID), by = c("waterbodyID" = "bsmWaterbodyID"))
+  left_join(select(combIDs, bsmWaterbodyID,commonID), by = c("waterbodyID" = "bsmWaterbodyID")) %>% 
+  mutate(yearSample = round(yearSample, digits = 0)) # Round year to nearest whole number; when multiple yearSamples exist
+
+## Pre-step... Are there differences in spring + summer secchi's from the same year? Use Bsm
+(secDiffTest <- t.test(secDat_means$meanSpringSecchi,waterClarDiff$meanSummerSecchi)) #Significant. 
+# Summer secchi's are 0.38 m deeper than spring
+
+boxplot(secDat_means$meanSpringSecchi,waterClarDiff$meanSummerSecchi, names = c("Spring","Summer"),
+        ylab="Secchi Depth (m)", las = 1, ylim=c(16,0))
 
 ## Step 1: Are there differences in water clarity between the two times
 waterClarDiff <- secDat_means %>% 
@@ -105,7 +115,7 @@ waterClar_addedVars <- waterClarDiff %>%
 
 # Visualize it
 boxplot(waterClarDiff$aruSecchi,waterClarDiff$meanSummerSecchi, names = c("Historic","Contemporary"),
-        ylab="Secchi Depth (m)", las = 1)
+        ylab="Secchi Depth (m)", las = 1, ylim=c(16,0))
 pClar <- ggplot(waterClarDiff) +
   geom_density(aes(x=secchiDiff),fill="grey",alpha=0.5) +
   geom_vline(xintercept = 0, linetype = "dotted", color = "red") +
@@ -123,7 +133,10 @@ pClar_trophicStatus
 clarMod <- lm(secchiDiff~lakeTrophicStatus+latARU+longARU+DEPMAX, data=waterClar_addedVars)
 summary(clarMod)
 anova(clarMod) # Trophic status quite important; Northerly lakes are getting darker
+residuals(clarMod)
 
+plot(secchiDiff~latARU,waterClar_addedVars)
+abline(lm(secchiDiff~latARU,waterClar_addedVars))
 ## OK - this tells us that water clarity is changing in ways we predict. Now let's model start the DOC modelling process
 
 ## Water clarity only increasing in eutrophic lakes, choose oligo and mesotrophic lakes
@@ -131,10 +144,14 @@ anova(clarMod) # Trophic status quite important; Northerly lakes are getting dar
 statDat_means_noEutro <- statDat_means %>% 
   filter(TDP < 10) # Wetzel says 20ugL TP and less is meso/oligo; also stats that TDP is ~50% of TP
 
+## Chose either all lakes (statDat_means) or all non-eutrophic lakes (statDat_means_noEutro)
+statDat_dataSet <- statDat_means
+statDat_dataSet <- statDat_means_noEutro
+
 ## Step 2: Create a model from BsM data
 ## Look at distribution of DOC observations; what distribution is most appropriate
 # Linear
-plot_DOCdensity <- ggplot(data = statDat_means_noEutro) +
+plot_DOCdensity <- ggplot(data = statDat_dataSet) +
   geom_density(aes(x=DOC), fill="grey", alpha = 0.7) +
   theme_bw()
 plot_DOCdensity #right skew
@@ -146,85 +163,200 @@ plot_DOCdensity_log #left skew
 
 # gamma distribution
 # Fit gamma distribution to the observed data
-fit <- MASS::fitdistr(statDat_means_noEutro$DOC, densfun = "gamma")
+fit <- MASS::fitdistr(statDat_dataSet$DOC, densfun = "gamma")
 
 # Visualize the fit
-ggplot(statDat_means_noEutro, aes(x = DOC)) +
+ggplot(statDat_dataSet, aes(x = DOC)) +
   geom_histogram(aes(y = ..density..), bins = 30, fill = "skyblue", color = "black", alpha = 0.7) +
   stat_function(fun = dgamma, args = list(shape = fit$estimate["shape"], rate = fit$estimate["rate"]), color = "red", size = 1) +
   labs(x = "DOC", y = "Density") +
   ggtitle("Gamma Distribution Fit to Data") 
 # gamma fits well with shape = 4.91, rate = 0.79
 
-## Model ARU data using GLM, gamma distribution
-# Fit the initial model
-ARUmod_gamma <- glm(DOC ~ secchiDepth * maxDepth, data = statDat_means_noEutro, family = Gamma(link = "log"), na.action = "na.fail")
-ARUmodSel <- dredge(ARUmod_gamma) #interaction is best model
+##### FIT MODELS!
+## Model ARU data using GLM, gamma distribution - This chunk has outliers, use next
+# # Fit the initial model
+# ARUmod_gamma <- glm(DOC ~ secchiDepth * maxDepth, data = statDat_dataSet, family = Gamma(link = "log"), na.action = "na.fail")
+# ARUmodSel <- dredge(ARUmod_gamma) #interaction is best model
+# 
+# ## Best models
+# # All lakes
+# ARUmod_gammaBest <- glm(DOC ~ secchiDepth * maxDepth, data = statDat_dataSet, family = Gamma(link = "log"))
+# # All non-eutrophic lakes
+# ARUmod_gammaBest <- glm(DOC ~ secchiDepth + maxDepth, data = statDat_dataSet, family = Gamma(link = "log"))
+# 
+# #  Model diagnostics
+# DHARMa::simulateResiduals(ARUmod_gammaBest, plot=T)
+# plot(ARUmod_gammaBest) # Diagnositcs not great but probably fine
+# car::vif(ARUmod_gammaBest) # VIF of interaction is 8, need to use just additive model
+# 
+# # model summaries
+# summary(ARUmod_gammaBest)
 
-ARUmod_gammaBest <- glm(DOC ~ secchiDepth + maxDepth, data = statDat_means, family = Gamma(link = "log"))
+## Gamma dist. has three potential outliers; rows 895, 867, 437. Reduce dataset try again
+gammaRedDat <- statDat_dataSet[-c(895,867,437),]
+
+# Fit the initial model
+ARUmod_gamma_red <- glm(DOC ~ secchiDepth * maxDepth, data = gammaRedDat, family = Gamma(link = "log"), na.action = "na.fail")
+ARUmodSel_red <- dredge(ARUmod_gamma_red) #interaction is best model
+
+## Best models
+# All lakes
+ARUmod_gammaBest_red <- glm(DOC ~ secchiDepth * maxDepth, data = gammaRedDat, family = Gamma(link = "log"))
+# All non-eutrophic lakes
+ARUmod_gammaBest_red <- glm(DOC ~ secchiDepth + maxDepth, data = gammaRedDat, family = Gamma(link = "log"))
 
 #  Model diagnostics
-plot(ARUmod_gammaBest)
-# Diagnositcs not great but probably fine
+DHARMa::simulateResiduals(ARUmod_gammaBest_red, plot=T) #Better
+plot(ARUmod_gammaBest_red) # Diagnositcs not great but probably fine
+car::vif(ARUmod_gammaBest_red) # VIF of interaction is 8, need to use just additive model
 
 # model summaries
-summary(ARUmod_gammaBest)
+glmSum <- summary(ARUmod_gammaBest_red)
 
-## What about  straight-up linear models
-aruVarsMod <- lm(log(DOC)~secchiDepth*maxDepth, data=statDat_means_noEutro, na.action = "na.fail")
-aruVarsSel <- dredge(aruVarsMod) #interaction is not important important
+# #### What about  straight-up linear models - outliers in this data chunk, use reduced dataset that follows
+# aruVarsMod <- lm(log(DOC)~secchiDepth*maxDepth, data=statDat_dataSet, na.action = "na.fail")
+# aruVarsSel <- dredge(aruVarsMod) #interaction is not important important
+# 
+# ## Best models
+# # All lakes
+# #aruVars_finalMod <- lm(log(DOC)~secchiDepth*maxDepth, data=statDat_dataSet)
+# # All non-eutrophic lakes
+# aruVars_finalMod <- lm(log(DOC)~secchiDepth+maxDepth, data=statDat_dataSet) 
+# 
+# plot(aruVars_finalMod) #diagnostics slightly better
+# summary(aruVars_finalMod)
+# anova(aruVars_finalMod)
+# car::vif(aruVars_finalMod) # VIF of interaction is 8, need to use just additive model
 
-aruVars_finalMod <- lm(log(DOC)~secchiDepth+maxDepth, data=statDat_means)
-plot(aruVars_finalMod) #diagnostics slightly better
-summary(aruVars_finalMod)
-anova(aruVars_finalMod)
-car::vif(aruVars_finalMod) # not used...only 2 vars
+## Some outliers in data set, redo without points 895, 867, 543
+statDat_reduce <- statDat_dataSet[-c(895,867,543),]
 
-## Use only non-eutrophic data
-plot(DOC~TDP, statDat_means_noEutro)
-plot(log(DOC)~log(TDP), statDat_means_noEutro)
-plot(log(secchiDepth)~log(TDP), statDat_means_noEutro)
-plot(DOC~secchiDepth, statDat_means_noEutro)
+# Model selection
+aruVarsMod_red <- lm(log(DOC)~secchiDepth*maxDepth, data=statDat_reduce, na.action = "na.fail")
+aruVarsSel_red <- dredge(aruVarsMod_red) #interaction is not important important
+
+# All lakes
+aruVars_finalMod_red <- lm(log(DOC)~secchiDepth*maxDepth, data=statDat_reduce)
+# All non-eutrophic lakes
+aruVars_finalMod_red <- lm(log(DOC)~secchiDepth+maxDepth, data=statDat_reduce) 
+
+plot(aruVars_finalMod_red) #diagnostics slightly better
+summary(aruVars_finalMod_red)
+anova(aruVars_finalMod_red)
+car::vif(aruVars_finalMod_red) # VIF of interaction is 8, need to use just additive model
+
+## What does this look like?
+plot(DOC~TDP, statDat_reduce)
+plot(log(DOC)~log(TDP), statDat_reduce)
+plot(log(secchiDepth)~log(TDP), statDat_reduce)
+plot(log(DOC)~log(secchiDepth), statDat_reduce)
 
 
 ## Goal 1: Predicting historical DOC; apply BsM eqn coefs to ARU data ####
 # With ARU data, estimate TP from TDS and DOC
-aruDOC_coefs <- coef(aruVars_finalMod)
+aruDOC_coefs <- coef(ARUmod_gammaBest_red) #GLM
+aruDOC_coefs <- coef(aruVars_finalMod) #LM
 
+# Coef DF using GLM
+aruDat_estimated <- aruDat %>% 
+  rename(secchiDepth = aruSecchi, maxDepth = DEPMAX) %>% 
+  filter(TDS < 300) %>% #Different linear relationship for saline lakes in Chow-Fraser (1991)
+  mutate(logDOC = predict(ARUmod_gammaBest_red, newdata = .),
+         estDOC = exp(logDOC)) %>% 
+  select(ARU_NM,ARU_LID,INV_YR,latARU,longARU,logTP,TP,lakeTrophicStatus,estDOC,secchiDepth,maxDepth) %>% 
+  rename(aruSecchi = secchiDepth,yearSampleARU = INV_YR)
+
+# Coef DF using LM
 aruDat_estimated <- aruDat %>% 
   filter(TDS < 300) %>% #Different linear relationship for saline lakes in Chow-Fraser (1991)
   mutate(logDOC = aruDOC_coefs[1] +
          aruDOC_coefs[2]*aruSecchi +
          aruDOC_coefs[3]*DEPMAX,
          estDOC = exp(logDOC)) %>% 
-  select(ARU_NM,ARU_LID,latARU,longARU,logTP,TP,lakeTrophicStatus,logDOC,estDOC,aruSecchi,DEPMAX) %>% 
-  rename(maxDepth = DEPMAX)
+  select(ARU_NM,ARU_LID,INV_YR,latARU,longARU,logTP,TP,lakeTrophicStatus,logDOC,estDOC,aruSecchi,DEPMAX) %>% 
+  rename(maxDepth = DEPMAX,yearSampleARU = INV_YR)
 
 ## Goal 1: Predicting historical DOC; compare ARU to BsM ####
+# No eutrophic lakes
 compDat <- aruDat_estimated %>% 
   left_join(select(combIDs, ARU_LID,commonID), by = "ARU_LID") %>% 
-  inner_join(select(statDat_means_noEutro, commonID,DOC), by="commonID") %>% 
+  inner_join(select(statDat_dataSet, yearSample, commonID,DOC), by="commonID") %>% 
   filter(!is.na(commonID) & 
-           lakeTrophicStatus!="eutrophic")  
+          # lakeTrophicStatus!="eutrophic" &
+           !is.na(aruSecchi) &
+           !is.na(maxDepth))  %>% 
+  mutate(docDiff = DOC-estDOC,
+         yearDiff = yearSample - yearSampleARU)
   
 compTtest <- t.test(compDat$estDOC,compDat$DOC)
-compTtest #Mean increase of 0.6 mgL between datasets
+compTtest #Mean increase of 0.58 mgL between datasets when using LM
+# Mean increase of 0.43 mgL between datasets when using GLM
+
+# Test rate of change
 compLM <- lm(log(DOC)~log(estDOC), compDat)
 plot(compLM)
 summary(compLM)
-plot(log(DOC)~log(estDOC), compDat, xlab="log Historic DOC Estimate (mg/L)", ylab = "log Contemporary DOC (mg/L)")
-abline(a = 0, b = 1, col = "red") 
-abline(a = 0.5, b = 0.77) #simple linear mod between variables; higher increases at low DOC lakes
+residComparison <- residuals(compLM)
+compDat_wResid <- cbind(compDat,residComparison)
+
+pDOCcomp <- ggplot(compDat, aes(x=estDOC,y=DOC)) +
+  geom_point(aes(colour=latARU)) +
+  scale_y_continuous(trans = "log", limits = c(1,18), labels = label_number(digits = 2)) +
+  scale_x_continuous(trans = "log", limits = c(1,18), labels = label_number(digits = 2)) +
+  geom_abline(linetype="dotted") +
+  geom_smooth(method = "lm", colour="black") +
+  xlab("Historic DOC estimate (mg/L)") +
+  ylab("Contemporary DOC measurement (mg/L)") +
+  theme_bw()
+pDOCcomp
+
+# Higher increase in historically clearer lakes
+ontario_shape <- st_read(here("data","OBM_INDEX.shp")) 
+
+residPLoc <- ggplot(compDat_wResid, aes(x=longARU,y=latARU,colour=residComparison)) +
+  geom_point()
+
+residMap <-ggplot() +
+  geom_sf(data = ontario_shape, colour="grey", alpha = 0.3) +
+  geom_point(data = compDat_wResid, aes(x = longARU, y = latARU, colour = residComparison)) +
+  scale_color_gradient2(mid = "white", low = "red", high = "blue", name = "Residuals") +  # Specify the gradient from red to white to blue
+  labs(title = "Residuals: red lakes are lighter, blue are darker") +
+  theme_minimal()
+residMap
+
+## Test/look at differences over time
+docOverTime <- lm(docDiff~yearDiff, compDat)
+plot(docOverTime)
+summary(docOverTime)
+
+plot(docDiff~yearDiff, compDat)
+abline(lm(docDiff~yearDiff, compDat))
+
+docDiffMap <-ggplot() +
+  geom_sf(data = ontario_shape, colour="grey", alpha = 0.3) +
+  geom_point(data = compDat, aes(x = longARU, y = latARU, colour = docDiff)) +
+  scale_color_gradient2(mid = "white", low = "blue", high = "brown", name = "Residuals") +  # Specify the gradient from red to white to blue
+  labs(title = "Blue lakes are lighter, brown are darker") +
+  theme_minimal()
+docDiffMap
 
 ## BsM DOC and secchi depth over time
 # Subset lakes that have 2 or more sample years
 allBsM_mult <- allBsm %>% 
   group_by(waterbodyID) %>% 
-  filter(n_distinct(yearSample) >= 2)
+  filter(n_distinct(yearSample) >= 2) %>% 
+  filter(predictorVariable != "TDP" | (predictorVariable == "TDP" & predictorValue < 10.01))
+
+
+allMult_check <- allBsM_mult %>% 
+  select(lakeName,yearSample) %>% 
+  distinct()
 
 statDatWide_mult <- statDat_wide %>% 
   group_by(waterbodyID) %>% 
-  filter(n_distinct(yearSample) >= 2)
+  filter(n_distinct(yearSample) >= 2)  %>% 
+  filter(TDP < 10.01) #Remember, this df has slighlty fewer waterbodyIDs because model data with NAs (any) had to be removed
 
 
 #Secchi
@@ -242,6 +374,17 @@ summary(BsM_DOCMod)
 
 plot(DOC~yearSample, statDatWide_mult)
 abline(lm(DOC~yearSample, statDatWide_mult))
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -277,4 +420,35 @@ controlDat <- statDat_means %>%
          logPtoCRatio = log(TDP)/log(DOC))
 plot(secchiDepth~PtoCRatio, controlDat)
 
+# Subset lakes that have 3 or more sample years
+allBsM_mult <- allBsm %>% 
+  group_by(waterbodyID) %>% 
+  filter(n_distinct(yearSample) >= 3)
 
+allMult_check <- allBsM_mult %>% 
+  select(lakeName,yearSample) %>% 
+  distinct()
+
+statDatWide_mult <- statDat_wide %>% 
+  group_by(waterbodyID) %>% 
+  filter(n_distinct(yearSample) >= 3)
+
+#Secchi
+BsM_secchiMod <- lmer(log(secchiDepth+0.1)~yearSample + (1|waterbodyID), allBsM_mult) #log transformation necessary
+plot(BsM_secchiMod)
+summary(BsM_secchiMod)
+
+plot(log(secchiDepth+0.1)~yearSample, allBsM_mult)
+abline(lm(log(secchiDepth+0.1)~yearSample, allBsM_mult))
+
+#DOC
+BsM_DOCMod <- lmer(DOC~yearSample + (1|waterbodyID), statDatWide_mult)
+plot(BsM_DOCMod)
+summary(BsM_DOCMod)
+
+plot(DOC~yearSample, statDatWide_mult)
+abline(lm(DOC~yearSample, statDatWide_mult))
+
+predDOC <- predict(BsM_DOCMod)
+BsMDOC_predMultiples <- cbind(statDatWide_mult,predDOC) %>% 
+  arrange(waterbodyID,yearSample)
