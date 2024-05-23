@@ -72,10 +72,11 @@ pDOCresp <- ggplot(docRespDat) +
 pDOCresp #To deal with wonky DOC~DOC relationship (and some var. in other variables) need to take mean of multiple observations per waterbodyID. Variation shows change b/w sampling events from the same lake
 
 pDOCresp_log <- ggplot(docRespDat) +
-  geom_point(aes(y=log(TDP),x=log(predictorValue)), alpha = 0.3)+
+  geom_point(aes(y=log(DOC),x=log(predictorValue)), alpha = 0.3)+
   facet_wrap(~predictorVariable, scales = "free")
 pDOCresp_log #To deal with wonky DOC~DOC relationship (and some var. in other variables) need to take mean of multiple observations per waterbodyID. Variation shows change b/w sampling events from the same lake
 # Again, DOC, TDP, NNTKUR, depth and Colour look like important independent predictors of DOC
+
 
 ## Goal 1: Checking for differences in water clarity; Predicting historical DOC; model selection ####
 ## The ARU database has secchi and depth, which can be used to predict DOC. 
@@ -91,6 +92,12 @@ statDat_means <- statDat_wide %>%
   summarise_all(mean, na.rm = TRUE) %>% 
   left_join(select(combIDs, bsmWaterbodyID,commonID), by = c("waterbodyID" = "bsmWaterbodyID")) %>% 
   mutate(yearSample = round(yearSample, digits = 0)) # Round year to nearest whole number; when multiple yearSamples exist
+
+# Look at correlations between different variables
+cor.test(statDat_means$secchiDepth, statDat_means$TDP)
+cor.test(statDat_means$secchiDepth, statDat_means$DOC)
+cor.test(statDat_means$DOC, statDat_means$`COLTR (TCU)`)
+cor.test(statDat_means$TDP, statDat_means$`COLTR (TCU)`)
 
 ## Pre-step... Are there differences in spring + summer secchi's from the same year? Use Bsm
 (secDiffTest <- t.test(secDat_means$meanSpringSecchi,waterClarDiff$meanSummerSecchi)) #Significant. 
@@ -311,6 +318,10 @@ pDOCcomp <- ggplot(compDat, aes(x=estDOC,y=DOC)) +
   theme_bw()
 pDOCcomp
 
+# Plot historic~contemporary by lake trophic status
+pDOCcomp_trophic <- pDOCcomp +
+  facet_wrap(~lakeTrophicStatus, nrow = 1)
+
 # Higher increase in historically clearer lakes
 ontario_shape <- st_read(here("data","OBM_INDEX.shp")) 
 
@@ -326,20 +337,37 @@ residMap <-ggplot() +
 residMap
 
 ## Test/look at differences over time
-docOverTime <- lm(docDiff~yearDiff, compDat)
+# Change reference category to oligotrophic
+compDat$lakeTrophicStatus <- relevel(factor(compDat$lakeTrophicStatus), ref = "oligotrophic")
+compDat$lakeTrophicStatus <- factor(compDat$lakeTrophicStatus, levels = c("oligotrophic","mesotrophic","eutrophic"))
+
+docOverTime <- lm(docDiff~yearDiff+latARU+lakeTrophicStatus+maxDepth, compDat)
 plot(docOverTime)
 summary(docOverTime)
-
-plot(docDiff~yearDiff, compDat)
-abline(lm(docDiff~yearDiff, compDat))
+anova(docOverTime)
+TukeyHSD(aov(docDiff~yearDiff+latARU+lakeTrophicStatus+maxDepth, compDat), which = "lakeTrophicStatus")
 
 docDiffMap <-ggplot() +
   geom_sf(data = ontario_shape, colour="grey", alpha = 0.3) +
-  geom_point(data = compDat, aes(x = longARU, y = latARU, colour = docDiff)) +
-  scale_color_gradient2(mid = "white", low = "blue", high = "brown", name = "Residuals") +  # Specify the gradient from red to white to blue
-  labs(title = "Blue lakes are lighter, brown are darker") +
-  theme_minimal()
+  geom_point(data = compDat, aes(x = longARU, y = latARU, colour = docDiff,  size = yearDiff)) +
+  scale_color_gradient2(mid = "white", low = "blue", high = "brown4", name = "DOC change (mg/L)") +  # Specify the gradient from red to white to blue
+  labs(title = "Blue lakes are lighter, brown are darker", size = "Years b/w samples") +
+  theme_minimal() +
+  facet_wrap(~lakeTrophicStatus, nrow = 1)
 docDiffMap
+
+## Summarize how many went up and down, and average for those
+docChangeSum <- compDat %>% 
+  group_by(lakeTrophicStatus) %>% 
+  summarise(n_DOC_increase = sum(docDiff > 0),
+            n_DOC_decrease = sum(docDiff < 0),
+            percentIncrease = (n_DOC_increase/(n_DOC_increase+n_DOC_decrease))*100,
+            avgIncrease_mgL = mean(docDiff > 0),
+            avgDecrease_mgL = mean(docDiff < 0),
+            medianChange_mgL = median(docDiff),
+            maxChange_mgL = max(docDiff), 
+            meanYearARU = mean(yearSampleARU),
+            meanYearBsM = mean(yearSample))
 
 ## BsM DOC and secchi depth over time
 # Subset lakes that have 2 or more sample years

@@ -7,18 +7,6 @@ library(tidyverse)
 library(here)
 library(lubridate)
 
-# Function to convert DMS to DD
-convert_dms_to_dd <- function(degrees, minutes, seconds, direction) {
-  # Calculate decimal degrees
-  dd <- degrees + minutes/60 + seconds/3600
-  # Adjust for negative direction
-  if (direction %in% c("S", "W")) {
-    dd <- -dd
-  }
-  return(dd)
-}
-
-
 ## BsM ##
 ## lake productivity and chemistry ##
 #-----------------------------------------#
@@ -62,7 +50,7 @@ summary(modNut) #singificant but low R2
 allBsm <- bind_rows(bsmDat,bsmNutRatio) %>% 
   left_join(select(bsmMorphoDat,-secchiDepth),by="waterbodyID")
 
-write_csv(allBsm, here("data","BsM_modelData_20240311.csv"))
+#write_csv(allBsm, here("data","BsM_modelData_20240311.csv"))
 
 ## ARU database ##
 aruDat <- read_csv(here("data","ontarioAquaticHabitatInventory_oldData.csv")) %>% 
@@ -74,11 +62,12 @@ aruDat <- read_csv(here("data","ontarioAquaticHabitatInventory_oldData.csv")) %>
          lonM = as.numeric(substr(LONGITUDE,3,4)),
          lonS = as.numeric(substr(LONGITUDE,5,6)),
          lonDirection = "W") %>% 
-  mutate(latARU = convert_dms_to_dd(latD, latM, latS, latDirection),
-         longARU = convert_dms_to_dd(lonD, lonM, lonS, lonDirection)) %>%  #Convert DMS to dd.dd
+  filter(!is.na(LATITUDE) | !is.na(LATITUDE)) %>% 
+  mutate(latARU = latD + (latM/60) + (latS/60),          #N; DMS to dd.dd
+         longAur = -lonD + (lonM/60) + (lonS/60)) %>%    #W; DMS ot dd.dd (need neg for W)
   select(-c(latD,latM,latS,lonD,lonM,lonS))
 
-write_csv(aruDat,here("data","ARU_modelData_20240311.csv"))
+#write_csv(aruDat,here("data","ARU_modelData_20240311.csv"))
 
 ## Transform data for stats ####
 statDat_prim <- allBsm %>% 
@@ -105,4 +94,39 @@ statDat_wide <-  statDat_long %>%
            !is.na(TKN),
          !is.na(NtoPratio)) # Need to remove NAs from predictor variables
 
-write_csv(statDat_wide, here("data","BsM_WideSampleModelData_20240311.csv"))
+#write_csv(statDat_wide, here("data","BsM_WideSampleModelData_20240311.csv"))
+
+## UPDATED BSM DATA ####
+# March 19, 2024
+# Blair Waslynko provided BsM Cycle 3 data. join to the datafile BsM_modelData_20240311.csv
+
+# Read data
+allBsM_update <- read_csv(here("data","BsM_modelData_20240311.csv"))
+cyc3Dat <- read_csv(here("data","waterChem_bsm_cycle3.csv"))
+cyc3Lakes <- read_csv(here("data","cyc3_lakesBathy.csv")) %>% 
+  select(waterbodyID,surfaceArea,lakeVolume,maxDepth,meanDepth,lat,long,yearSample,monthSample,daySample) %>% 
+  distinct() 
+
+# Filter cyc3Dat to lakes which already exist in allBsM_update
+cyc3Dat_filtered <- cyc3Dat %>% 
+  filter(waterbodyID %in% unique(allBsM_update$waterbodyID)) %>% 
+  left_join(cyc3Lakes, by="waterbodyID") %>% 
+  rename(BsM_Cycle=Cycle,lakeName=`Lake Name`,WaterChemLat=Latitude,WaterChemLong=Longitude) %>% 
+  relocate(`COLTR (TCU)`:TDP, .after = last_col()) %>% 
+  mutate(FMZ = as.factor(FMZ))
+cyc3_long <- cyc3Dat_filtered %>% 
+  pivot_longer(cols = `COLTR (TCU)`:TDP, names_to = "predictorVariable", values_to = "predictorValue")
+
+# Merge with old data
+allBsM_new <- bind_rows(allBsM_update,cyc3_long)
+allBsM_new
+
+#write_csv(allBsM_new, here("data","allBsM_updatedCyc3_20240520.csv"))
+
+## Now updated statDat_wide
+statDat_wideCyc3 <- cyc3Dat_filtered %>% 
+  rename(TKN = `NNTKUR (ug/L)`) %>% 
+  select(-WaterChemLat,-WaterChemLong,-monthSample,-daySample) %>% 
+  bind_rows(statDat_wide)
+
+#write_csv(statDat_wideCyc3, here("data","statDatWide_updatedCyc3_20240520.csv"))
