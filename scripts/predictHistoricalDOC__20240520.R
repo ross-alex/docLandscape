@@ -74,7 +74,7 @@ cor.test(statDat_means$DOC, statDat_means$`COLTR (TCU)`)
 cor.test(statDat_means$TDP, statDat_means$`COLTR (TCU)`)
 
 ## Pre-step... Are there differences in spring + summer secchi's from the same year? Use Bsm
-(secDiffTest <- t.test(secDat_means$meanSpringSecchi,secDat_means$meanSummerSecchi)) #Significant. 
+(secDiffTest <- t.test(secDat_means$meanSpringSecchi,secDat_means$meanSummerSecchi,paired = TRUE)) #Significant. 
 # Summer secchi's are 0.31 m deeper than spring. No use accounting for difference - diff. is smaller than mean sd
 
 boxplot(secDat_means$meanSpringSecchi,secDat_means$meanSummerSecchi, names = c("Spring","Summer"),
