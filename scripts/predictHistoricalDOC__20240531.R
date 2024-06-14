@@ -64,7 +64,7 @@ summary(clarDOCmod_gammaBest)
 bsmDOCGammaRedDat <- bsmDOC[c(-629, -1509),]
 
 # Fit the initial model
-clarDOCmod_gamma_red <- glm(DOC ~ secchiDepth * maxDepth + lat, data = bsmDOCGammaRedDat, family = Gamma(link = "log"), na.action = "na.fail")
+clarDOCmod_gamma_red <- glm(DOC ~ scale(secchiDepth) * scale(maxDepth) + scale(lat), data = bsmDOCGammaRedDat, family = Gamma(link = "log"), na.action = "na.fail")
 (clarDOCmod_gamma_sel_red <- dredge(clarDOCmod_gamma_red)) #interaction is now best
 
 # Best reduced model
@@ -134,28 +134,28 @@ plot(DOC~yearSample, mainDF)
 # Model w. gamma distribution
 docChangeMod_noSlope <- glmer(DOC ~ scale(yearSample) + (1|commonID), data = mainDF, 
                       family = Gamma(link = "log"))
-docChangeMod <- glmer(DOC ~ scale(yearSample) + (yearSample|commonID), data = mainDF, 
+docChangeMod <- glmer(DOC ~ scale(yearSample) + (scale(yearSample)|commonID), data = mainDF, 
                       family = Gamma(link = "log"))
-docChangeModNull <- glmer(DOC ~ 1 + (yearSample|commonID), data = mainDF, 
+docChangeModNull <- glmer(DOC ~ 1 + (scale(yearSample)|commonID), data = mainDF, 
                           family = Gamma(link = "log"))
-AIC(docChangeMod_noSlope,docChangeMod,docChangeModNull)                         # Null has best AIC by a mile
+AIC(docChangeMod_noSlope,docChangeMod,docChangeModNull)                         # Slopes + intercept best model
 
 DHARMa::simulateResiduals(docChangeMod, plot=T) # Absolutely horrible; can't be used
-plot(docChangeMod) # Super bad; pattern
-summary(docChangeMod)
+plot(docChangeMod)                              # Super bad; pattern
+summary(docChangeMod)                           # Year sample not significant
 
 # Model w. linear distribution
 docChangeMod_lm_noSl <- lmer(DOC ~ scale(yearSample) + (1|commonID), data = mainDF)
-docChangeMod_lm <- lmer(DOC ~ scale(yearSample) + (yearSample|commonID), data = mainDF)
-docChangeMod_lmNull <- lmer(DOC ~ 1 + (yearSample|commonID), data = mainDF)
+docChangeMod_lm <- lmer(DOC ~ scale(yearSample) + (scale(yearSample)|commonID), data = mainDF)
+docChangeMod_lmNull <- lmer(DOC ~ 1 + (scale(yearSample)|commonID), data = mainDF)
 AIC(docChangeMod_lm, docChangeMod_lm_noSl, docChangeMod_lmNull)   # Model w. year as random slope best
  
 DHARMa::simulateResiduals(docChangeMod_lm, plot=T) #Better
 plot(docChangeMod_lm)    # some exploding variance but much better than; logging doesn't help, just flips the problem
 
 # View the summary of the model
-summary(docChangeMod_lm)            # Significant. Shows a 0.12 mg/L increase per decade
-r.squaredGLMM(docChangeMod_lm)      # R2 quite telling. Marginal R2 = 0.006, Conditional R2 = 0.76. Nearly all variance 
+(sumMod <- summary(docChangeMod_lm))# Significant. Shows a 0.12 mg/L increase per decade (when not on scaled data)
+r.squaredGLMM(docChangeMod_lm)      # R2 quite telling. Marginal R2 = 0.005, Conditional R2 = 0.91. Nearly all variance 
                                     # captured at the lake level. Might not be much of an increase OR recent BsM period 
                                     # has no change. See chunk ~30 lines below to look at that (bsmModDat)
 
@@ -165,7 +165,8 @@ abline(lm(DOC~yearSample,mainDF))   # Confirms temporal relationship (or lack th
 ## Goal 4 - If not changes over time, what explains DOC across Ontario lakes? ####
 # Earlier analyses and literature indicates DOC may be affected by other easily accessed variables.
 # When included in models, do we improve our understanding of DOC variation across the province?
-docChangeMod_allVars_lmm <- lmer(DOC ~ yearSample*lakeTrophicStatus*maxDepth + (yearSample|commonID),         # latitude has been removed as it is now in predictions of historic DOC (can't also be a predictor...)
+docChangeMod_allVars_lmm <- lmer(DOC ~ scale(yearSample)*lakeTrophicStatus*scale(maxDepth) + 
+                                   (scale(yearSample)|commonID),         # latitude has been removed as it is now in predictions of historic DOC (can't also be a predictor...)
                                  data = mainDF, na.action = na.fail)
 (allVars_modSel <- dredge(docChangeMod_allVars_lmm))   # Best model now just maxDepth and yearSample
                                                        
@@ -173,22 +174,24 @@ docChangeMod_allVars_lmm <- lmer(DOC ~ yearSample*lakeTrophicStatus*maxDepth + (
 # docChangeMod_redVars_lmm <- lmer(DOC ~ yearSample+lakeTrophicStatus+maxDepth+lat+             # This model was best prior to removing
 #                                    lat:yearSample + (yearSample|commonID),data = mainDF)      # latitude from the model
 
-docChangeMod_redVars_lmm <- lmer(DOC ~ yearSample + maxDepth + (yearSample|commonID),data = mainDF)
+docChangeMod_redVars_lmm <- lmer(DOC ~ scale(yearSample) + scale(maxDepth) + (scale(yearSample)|commonID),data = mainDF)
 
 DHARMa::simulateResiduals(docChangeMod_redVars_lmm, plot=T) #Ok
 plot(docChangeMod_redVars_lmm) 
 
 summary(docChangeMod_redVars_lmm)
 r.squaredGLMM(docChangeMod_redVars_lmm)      # R2 better. Marginal R2 = 0.16, Conditional R2 = 0.82. 38% improvement 
-                                             # from yearSampled only model
+                                             # from yearSampled only model. All of this coming from maxDepth essentially
 
 pTime <- ggplot(mainDF) +
   geom_point(aes(x=yearSample,y=DOC, size=lat,colour=maxDepth),alpha=0.7) +
   geom_smooth(aes(x=yearSample,y=DOC), method = "lm") +
   scale_color_viridis_c(option = "plasma") +
-  theme_bw()
+  theme_bw() + 
+  facet_wrap(~lakeTrophicStatus)
 pTime
-
+# Cody, lake trophic status shouldn't be in the model but here for illustration. I think these
+# data need to be seperated into historic/contemporary rather than continuous
 
 ## What happens when we just look at BsM data
 bsmModDat <- filter(mainDF, yearSample > 1990)  # No ARU data sampled in 90s
@@ -197,23 +200,22 @@ bsmModYear <- lmer(DOC~scale(yearSample) + (1|commonID), data=bsmModDat)
 bsmModYearNull <- lmer(DOC~ 1 + (1|commonID), data=bsmModDat)
 AIC(bsmModYear,bsmModYearNull)                                          # Null is best model; for shits, look at model below
 summary(bsmModYear) # No effect when considering just year (and random slope + intercept model isn't working - not enough data; can't fit slope to 1 point)
-# No effect in contemporary data suggests that maybe we just take a mean of all the data
+# No effect in contemporary data suggests that maybe we just take a mean of all the data, compare the two time periods
 
 # What about when we include more in the model?
 docChangeMod_BsM_allVars_lmm <- lmer(DOC ~ scale(yearSample)*lakeTrophicStatus*scale(maxDepth)*scale(lat) + (1|commonID),
-                                        data = bsmModDat, na.action = na.fail)    # Couldn't use slopes + intercepts because number of rand. effects > num fixed observations
+                                        data = bsmModDat, na.action = na.fail, REML = FALSE)    # Couldn't use slopes + intercepts because number of rand. effects > num fixed observations
 dredge(docChangeMod_BsM_allVars_lmm)                                              # same best model as all data
-# dredge above shows yearSample not even important and should be dropped from model. Clear that there's no effect of year
 
-#***This below was based on
-# docChangeMod_BsM_redVars_lmm <- lmer(DOC ~ yearSample+lakeTrophicStatus+maxDepth+lat+
-#                                    lat:yearSample + (1|commonID),data = bsmModDat)
-# DHARMa::simulateResiduals(docChangeMod_BsM_redVars_lmm, plot=T) #Ok... but not great
-# plot(docChangeMod_BsM_redVars_lmm) 
-# 
-# summary(docChangeMod_BsM_redVars_lmm)
-# r.squaredGLMM(docChangeMod_BsM_redVars_lmm)      # R2 better. Marginal R2 = 0.4, Conditional R2 = 0.94. 40% improvement from 
-#                                                  # from yearSampled only model; lots of in-lake variance
+docChangeMod_BsM_redVars_lmm <- lmer(DOC ~ scale(yearSample)+lakeTrophicStatus+scale(maxDepth)+scale(lat)+
+                                     lakeTrophicStatus:scale(lat)+scale(lat):scale(maxDepth)+
+                                     scale(maxDepth):scale(yearSample) + (1|commonID),data = bsmModDat)
+DHARMa::simulateResiduals(docChangeMod_BsM_redVars_lmm, plot=T) #Ok... but not great
+plot(docChangeMod_BsM_redVars_lmm)
+
+summary(docChangeMod_BsM_redVars_lmm)
+r.squaredGLMM(docChangeMod_BsM_redVars_lmm)      # R2 better. Marginal R2 = 0.41, Conditional R2 = 0.94. 40% improvement from
+                                                 # from yearSampled only model; lots of in-lake variance
 
 pTime_BsM <- ggplot(bsmModDat) +
   geom_point(aes(x=yearSample,y=DOC, colour=lakeTrophicStatus, size=lat,alpha=maxDepth)) +
@@ -221,6 +223,32 @@ pTime_BsM <- ggplot(bsmModDat) +
   theme_bw()
 pTime_BsM
 
+## What happens when we just look at ARU data
+aruModDat <- filter(mainDF, yearSample < 1990)  # No ARU data sampled in 90s
 
+aruModYear <- lm(DOC~scale(yearSample), data=aruModDat)
+aruModYearNull <- lm(DOC~ 1, data=aruModDat)
+AIC(aruModYear,aruModYearNull)                                          # Null is best model; for shits, look at model below
+summary(aruModYear) # No effect when considering just year (and random slope + intercept model isn't working - not enough data; can't fit slope to 1 point)
+# No effect in contemporary data suggests that maybe we just take a mean of all the data, compare the two time periods
+
+# What about when we include more in the model?
+docChangeMod_aru_allVars_lm <- lm(DOC ~ scale(yearSample)*lakeTrophicStatus*scale(maxDepth)*scale(lat),
+                                     data = aruModDat, na.action = na.fail, REML = FALSE)    # Couldn't use slopes + intercepts because number of rand. effects > num fixed observations
+dredge(docChangeMod_aru_allVars_lm)                                              # same best model as all data
+
+docChangeMod_aru_redVars_lm <- lm(DOC ~ scale(yearSample)+lakeTrophicStatus+scale(maxDepth)+scale(lat)+
+                                       lakeTrophicStatus:scale(lat),data = aruModDat)
+DHARMa::simulateResiduals(docChangeMod_aru_redVars_lm, plot=T) #Ok... but not great
+plot(docChangeMod_aru_redVars_lm)
+
+summary(docChangeMod_aru_redVars_lm)
+r.squaredGLMM(docChangeMod_aru_redVars_lm)      
+
+pTime_aru <- ggplot(aruModDat) +
+  geom_point(aes(x=yearSample,y=DOC, colour=lakeTrophicStatus, size=lat,alpha=maxDepth)) +
+  geom_smooth(aes(x=yearSample,y=DOC, colour=lakeTrophicStatus), method = "lm") +
+  theme_bw()
+pTime_aru
 
 
