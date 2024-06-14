@@ -1,5 +1,7 @@
 ## Is there a relationship between secchi and DOC (and potentially other variables)
-# AJR: 2024-02-17
+# AJR: 2024-02-27
+# See script predictHistoricalDOC_20240520.R for decisions regarding gamma GLM vs. LM, 
+# and analyses no longer in use
 
 library(tidyverse)
 library(lubridate)
@@ -10,15 +12,11 @@ library(scales)
 library(sf)
 
 ## Read Data ####
-#allBsm <- read_csv(here("data","BsM_modelData_20240311.csv"))
-allBsm <- read_csv("data","allBsM_updatedCyc3_20240520.csv")
-allARU <- read_csv(here("data","ARU_modelData_20240311.csv"))
-#statDat_wide <- read_csv(here("data","BsM_WideSampleModelData_20240311.csv")) %>% 
-statDat_wide <- read_csv(here("data","statDatWide_updatedCyc3_20240520.csv")) %>% #This dataset is slightly reduced
-                  filter(log(TKN) >4) #outliers <4                            #to remove all rows that had at 
-                                                                              #at least one NA. See 'modelData_assembly_20240311.R'
-                                                                              # script for details (bottom chunk)
-combIDs <- read_csv(here("data","commonDataIDs_aruToBsm_20240307.csv")) #has common IDs between BsM and ARU
+allBsm <- read_csv("data/allBsM_updatedCyc3_20240520.csv")
+allARU <- read_csv(here("data/ARU_modelData_20240311.csv"))
+statDat_wide <- read_csv("data/statDatWide_updatedCyc3_20240520.csv") %>% 
+                  filter(log(TKN) >4) # Clear outliers < 4 (only two observations)                       
+combIDs <- read_csv(here("data/commonDataIDs_aruToBsm_20240307.csv")) #has common IDs between BsM and ARU
 
 #Estimate TP from TDS and apply a trophic status
 aruDat <- allARU %>% 
@@ -29,10 +27,10 @@ aruDat <- allARU %>%
                                        TP > 10 & TP < 20 ~ "mesotrophic",
                                        TP > 20 ~ "eutrophic")) %>% 
   filter(!is.na(commonID)) %>% 
-  rename(aruSecchi = SECCHI)
+  rename(aruSecchi = SECCHI,aruYear = INV_YR)
 
 #Read all secchi depths
-secDat <- read_csv(here("data","summerSecchis_bsm.csv")) %>% 
+secDat <- read_csv("data/summerSecchis_bsm.csv") %>% 
   select(WbyLID,`Water Chem Sample Date`, `Water Chem Secchi Depth (Spring)`,`Limno Sample Date`, `Limno Secchi Depth (Summer)`) %>% 
   rename(waterbodyID = WbyLID, 
          waterChem_dateSample = `Water Chem Sample Date`, 
@@ -49,42 +47,47 @@ secDat_means <- secDat %>%
             waterClarDiff = meanSummerSecchi-meanSpringSecchi,
             sdSummerSecchi = sd(summerSecchi,na.rm=TRUE),
             sdSpringSecchi = sd(springSecchi,na.rm=TRUE))
-
-## Goal 1: Checking for differences in water clarity; Predicting historical DOC; model selection ####
-## The ARU database has secchi and depth, which can be used to predict DOC. 
-# A regression can be applied to BsM data where DOC is known, and the parameters from this model can
-# then be applied to the ARU database. DOC distribution seems somewhat gamma distributed. Check models
-# for linear, log-linear, and gamma dist. for response variable (DOC)
-# Additionally, check if removing eutrophic lakes is necessary. 
+secDat_grandMeans <- secDat %>% 
+  summarise(meanSummerSecchi = mean(summerSecchi,na.rm=TRUE),
+            meanSpringSecchi = mean(springSecchi, na.rm=TRUE),
+            SdSummer = sd(summerSecchi,na.rm=TRUE),
+            SdSpring = sd(springSecchi,na.rm=TRUE))
 
 ## Make dataframe using mean values across different BsM cycles; using means as a conservative "contempoary" value.
 # Could also take the max (most recent year), though this affects interpretation (some year gaps will be very different; short or long)
 statDat_means <- statDat_wide %>%
   group_by(waterbodyID) %>% 
   select(-BsM_Cycle, -dateSample) %>%
+  left_join(select(secDat,waterbodyID,summerSecchi)) %>% 
   summarise_all(mean, na.rm = TRUE) %>% 
   left_join(select(combIDs, bsmWaterbodyID,commonID), by = c("waterbodyID" = "bsmWaterbodyID")) %>% 
   mutate(yearSample = round(yearSample, digits = 0)) # Round year to nearest whole number; when multiple yearSamples exist
 
-# Look at correlations between different variables
-cor.test(statDat_means$secchiDepth, statDat_means$TDP)
-cor.test(statDat_means$secchiDepth, statDat_means$DOC)
-cor.test(statDat_means$DOC, statDat_means$`COLTR (TCU)`)
-cor.test(statDat_means$TDP, statDat_means$`COLTR (TCU)`)
+
+## Goal 1: Checking for differences in water clarity; Predicting historical DOC; model selection ####
+## The ARU database has secchi and depth, which can be used to predict DOC. 
+# A regression can be applied to BsM data where DOC is known, and the parameters from this model can
+# then be applied to the ARU database. DOC distribution is gamma distributed. 
 
 ## Pre-step... Are there differences in spring + summer secchi's from the same year? Use Bsm
-(secDiffTest <- t.test(secDat_means$meanSpringSecchi,secDat_means$meanSummerSecchi,paired = TRUE)) #Significant. 
-# Summer secchi's are 0.31 m deeper than spring. No use accounting for difference - diff. is smaller than mean sd
+(secDiffTest <- t.test(secDat$springSecchi,secDat$summerSecchi,paired = TRUE))      #Significant. 
+(secDiffTestMM <- lmer(springSecchi~summerSecchi + (1|waterbodyID),secDat))         #More significant.. 
+# t-test: Summer secchi's are 0.32 m deeper than spring. 
+# LMM: Summer secchi's are 0.59m deeper than spring
+plot(secDat_means$meanSpringSecchi~secDat_means$meanSummerSecchi)
 
 boxplot(secDat_means$meanSpringSecchi,secDat_means$meanSummerSecchi, names = c("Spring","Summer"),
         ylab="Secchi Depth (m)", las = 1, ylim=c(16,0))
 
-## Step 1: Are there differences in water clarity between the two times
+## Step 1: Are there differences in water clarity between the two times?
+# Using means. This allows for using all the BsM secchi depth data
 waterClarDiff <- statDat_means %>% 
   select(waterbodyID,commonID,secchiDepth) %>%                          # Using spring BsM secchi; more consistent (and above analysis shows doesn't matter)
+  #select(waterbodyID,commonID,summerSecchi) %>%                          # Using summer BsM secchi; likely better temporal match though more possible variation
   left_join(select(aruDat, commonID, aruSecchi, lakeTrophicStatus)) %>% 
   filter_all(all_vars(!is.na(.))) %>% 
-  mutate(secchiDiff = secchiDepth-aruSecchi) %>% 
+  mutate(secchiDiff = secchiDepth-aruSecchi) %>%                        # Using spring BsM secchi
+  #mutate(secchiDiff = summerSecchi-aruSecchi) %>%                        # Using summer BsM secchi
   mutate(lakeTrophicStatus = factor(lakeTrophicStatus, levels = c("oligotrophic","mesotrophic","eutrophic")))
 
 waterClar_addedVars <- waterClarDiff %>% 
@@ -95,19 +98,24 @@ waterClar_addedVars <- waterClarDiff %>%
          centeredMaxDepth = scale(DEPMAX,scale=FALSE))
 waterClar_addedVars_clean <- na.omit(waterClar_addedVars)
 
-# T test
+# T test with spring BsM
 (clarTtest <- t.test(waterClarDiff$aruSecchi,waterClarDiff$secchiDepth)) #Significant. ARU has deeper secchis = clearer lakes
 # Secchi's are 0.55 m shallower now
+# T test with summer BsM
+(clarTtest <- t.test(waterClarDiff$aruSecchi,waterClarDiff$summerSecchi)) #Not Significant (p=0.086). ARU has deeper secchis = clearer lakes
+# Secchi's are 0.19m shallower now
 
 # Visualize it
 boxplot(waterClarDiff$aruSecchi,waterClarDiff$secchiDepth, names = c("Historic","Contemporary"),
+        ylab="Secchi Depth (m)", las = 1, ylim=c(16,0))
+boxplot(waterClarDiff$aruSecchi,waterClarDiff$summerSecchi, names = c("Historic","Contemporary"),
         ylab="Secchi Depth (m)", las = 1, ylim=c(16,0))
 pClar <- ggplot(waterClarDiff) +
   geom_density(aes(x=secchiDiff),fill="grey",alpha=0.5) +
   geom_vline(xintercept = 0, linetype = "dotted", color = "red") +
   ggtitle("Negative values indicate a lake is darker now than historically") +
   theme_bw()
-pClar #Mean and majority data <0. These are using all data. Let's look at trophic status
+pClar #These are using all data. Let's look at trophic status
 
 # What happens in each trophic group? Oligotrophic most negative...
 pClar_trophicStatus <- pClar +
@@ -380,12 +388,21 @@ statDat_wide_multTrophicCat_recent <- statDat_wide_multTrophicCat %>%
 ## DOC - USE THIS; same model formulation as historic comparison
 
 docTemporal <- lm(log(DOC)~ lakeTrophicStatus+
+  yearSample +
   scale(lat,scale=FALSE)+
   scale(maxDepth,scale=FALSE), data = statDat_wide_multTrophicCat)
 plot(docTemporal)
 summary(docTemporal)
 anova(docTemporal)
 #worthwhile to plot partial dependence plots
+
+docTemporal_mm <- lmer(log(DOC)~ lakeTrophicStatus+
+                    yearSample +
+                    scale(lat,scale=FALSE)+
+                    scale(maxDepth,scale=FALSE) + (1|waterbodyID), data = statDat_wide_multTrophicCat)
+plot(docTemporal_mm)
+summary(docTemporal_mm)
+anova(docTemporal_mm)
 
 pTime_nuts <- ggplot(filter(statDat_wide_multTrophicCat,yearSample < 2020)) +
   geom_jitter(aes(x=yearSample,y=DOC, colour=lakeTrophicStatus, size=maxDepth,alpha=lat),width=0.2) +
