@@ -116,6 +116,12 @@ mainDF <- bsmDOC %>%
   bind_rows(aruDat_DOCestimated_GLM) %>% 
   filter(complete.cases(.))
 
+#Make sure to drop all instances with only 1 data point (i.e., one year)
+todrop <- mainDF %>% group_by(commonID) %>% summarize(count = n()) %>% arrange(count) %>% filter(count == 1)
+mainDF <- mainDF[-which(mainDF$commonID %in% todrop$commonID),]
+mainDF$scaled_yearSample <- as.vector(scale(mainDF$yearSample, scale = FALSE)) # Create scaledYear. scale=F so that a 1 unit change still represents 1 year 
+mainDF$samplingProgram <- if_else(mainDF$scaled_yearSample > 0, "BsM", "ARU")
+
 # Distribution of response variable
 (docDist_raw <- hist(mainDF$DOC))
 (docDist_log <- hist(log(mainDF$DOC)))
@@ -130,24 +136,45 @@ ggplot(mainDF, aes(x = DOC)) +
 
 # What do the data look like?
 plot(DOC~yearSample, mainDF)
+plot(DOC~scaled_yearSample, mainDF)
+abline(lm(DOC~scaled_yearSample,mainDF))
+
+# GLMM from Cody D.
+library(glmmTMB)
+docChangeMod_noSlope_glmmTMB <- glmmTMB(DOC ~ scaled_yearSample + (1|commonID),
+                                        data = mainDF,
+                                        family = Gamma(link = "log"))
+docChangeMod_Slope_glmmTMB <- glmmTMB(DOC ~ scaled_yearSample + (scaled_yearSample|commonID),
+                                        data = mainDF,
+                                        family = Gamma(link = "log"))
+
+DHARMa::simulateResiduals(docChangeMod_noSlope_glmmTMB, plot=T) # looks good
+DHARMa::simulateResiduals(docChangeMod_Slope_glmmTMB, plot=T) # looks good
+model_summary = summary(docChangeMod_noSlope_glmmTMB)                           # Year significant - estimate is on link scale
+model_summary = summary(docChangeMod_Slope_glmmTMB)                           # Year significant - estimate is on link scale
+
+#Extract fixed effects and transform to the response scale
+fixed_effects_link_scale <- model_summary$coefficients$cond
+fixed_effects_response_scale <- exp(fixed_effects_link_scale[, "Estimate"])
+fixed_effects_response_scale #suggests an average change of + 0.078% increase in DOC per year (effect size is 1.0077, which means each year you multiply by 1.0077). See plot below for the change in an average lake over the 60 year sampling period.
 
 # Model w. gamma distribution
-docChangeMod_noSlope <- glmer(DOC ~ scale(yearSample) + (1|commonID), data = mainDF, 
+docChangeMod_noSlope <- glmer(DOC ~ scale(yearSample, scale = FALSE) + (1|commonID), data = mainDF, 
                       family = Gamma(link = "log"))
-docChangeMod <- glmer(DOC ~ scale(yearSample) + (scale(yearSample)|commonID), data = mainDF, 
+docChangeMod <- glmer(DOC ~ scale(yearSample, scale = FALSE) + (scale(yearSample, scale = FALSE)|commonID), data = mainDF, 
                       family = Gamma(link = "log"))
-docChangeModNull <- glmer(DOC ~ 1 + (scale(yearSample)|commonID), data = mainDF, 
+docChangeModNull <- glmer(DOC ~ 1 + (scale(yearSample, scale = FALSE)|commonID), data = mainDF, 
                           family = Gamma(link = "log"))
-AIC(docChangeMod_noSlope,docChangeMod,docChangeModNull)                         # Slopes + intercept best model
+AIC(docChangeMod_noSlope,docChangeMod,docChangeModNull,docChangeMod_noSlope_glmmTMB,docChangeMod_Slope_glmmTMB)                         # Slopes + intercept best model
 
 DHARMa::simulateResiduals(docChangeMod, plot=T) # Absolutely horrible; can't be used
 plot(docChangeMod)                              # Super bad; pattern
 summary(docChangeMod)                           # Year sample not significant
 
 # Model w. linear distribution
-docChangeMod_lm_noSl <- lmer(DOC ~ scale(yearSample) + (1|commonID), data = mainDF)
-docChangeMod_lm <- lmer(DOC ~ scale(yearSample) + (scale(yearSample)|commonID), data = mainDF)
-docChangeMod_lmNull <- lmer(DOC ~ 1 + (scale(yearSample)|commonID), data = mainDF)
+docChangeMod_lm_noSl <- lmer(DOC ~ scale(yearSample, scale=FALSE) + (1|commonID), data = mainDF)
+docChangeMod_lm <- lmer(DOC ~ scale(yearSample, scale=FALSE) + (scale(yearSample,scale=FALSE)|commonID), data = mainDF)
+docChangeMod_lmNull <- lmer(DOC ~ 1 + (scale(yearSample,scale=FALSE)|commonID), data = mainDF)
 AIC(docChangeMod_lm, docChangeMod_lm_noSl, docChangeMod_lmNull)   # Model w. year as random slope best
  
 DHARMa::simulateResiduals(docChangeMod_lm, plot=T) #Better
@@ -214,13 +241,15 @@ DHARMa::simulateResiduals(docChangeMod_BsM_redVars_lmm, plot=T) #Ok... but not g
 plot(docChangeMod_BsM_redVars_lmm)
 
 summary(docChangeMod_BsM_redVars_lmm)
+anova(docChangeMod_BsM_redVars_lmm)
 r.squaredGLMM(docChangeMod_BsM_redVars_lmm)      # R2 better. Marginal R2 = 0.41, Conditional R2 = 0.94. 40% improvement from
                                                  # from yearSampled only model; lots of in-lake variance
 
 pTime_BsM <- ggplot(bsmModDat) +
   geom_point(aes(x=yearSample,y=DOC, colour=lakeTrophicStatus, size=lat,alpha=maxDepth)) +
   geom_smooth(aes(x=yearSample,y=DOC, colour=lakeTrophicStatus), method = "lm") +
-  theme_bw()
+  theme_bw() +
+  facet_wrap(~lakeTrophicStatus)
 pTime_BsM
 
 ## What happens when we just look at ARU data
@@ -248,7 +277,8 @@ r.squaredGLMM(docChangeMod_aru_redVars_lm)
 pTime_aru <- ggplot(aruModDat) +
   geom_point(aes(x=yearSample,y=DOC, colour=lakeTrophicStatus, size=lat,alpha=maxDepth)) +
   geom_smooth(aes(x=yearSample,y=DOC, colour=lakeTrophicStatus), method = "lm") +
-  theme_bw()
+  theme_bw() +
+  facet_wrap(~lakeTrophicStatus)
 pTime_aru
 
 
