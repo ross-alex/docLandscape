@@ -40,6 +40,8 @@ aruDat <- allARU %>%
 # Main dataset combining ARU and BsM
 mainDF <- bind_rows(statDat_wide,aruDat) %>% 
   filter(!is.na(yearSample)) %>% filter(!is.na(commonID))
+mainDF = mainDF %>% filter(!is.na(secchiDepth)) %>% filter(!is.na(maxDepth))
+
 todrop <- mainDF %>% group_by(commonID) %>% summarize(count = n()) %>% arrange(count) %>% filter(count == 1)
 mainDF <- mainDF[-which(mainDF$commonID %in% todrop$commonID),]
 mainDF$scaled_yearSample <- as.vector(scale(mainDF$yearSample, scale = FALSE)) # Create scaledYear. scale=F so that a 1 unit change still represents 1 year 
@@ -69,7 +71,7 @@ secLog_slopeInt <- update(secGamma_slopeInt, family=lognormal(link="log"))
 AIC(secGamma_int,secGamma_slopeInt,secLog_int,secLog_slopeInt)
 
 # All converged. Gamma better than lognormal. Random slopes better than just random intercept but I still 
-# prefer the random intercept for ease of interpretation - although fine with either
+# 
 
 # Diagnostics: CODY rejigged this
 bestmodel = secGamma_slopeInt
@@ -80,8 +82,21 @@ hist(residuals(bestmodel), breaks = 30, main = "Histogram of Residuals")
 # Let's look at results. CODY: I rejjiged this for glmmTMB models
 (sumSecchi <- summary(bestmodel)) 
 exp(sumSecchi$coefficients$cond[, "Estimate"])#secchi decreases by 0.37% per year (1-0.9963)
-visreg(bestmodel, "scaled_yearSample", scale="response")
+visreg(bestmodel, "scaled_yearSample", scale="response", partial = TRUE) # I think
 r.squaredGLMM(bestmodel)          # Fixed effects R2 = 0.017; random R2 = 0.75
+
+#nicer plot
+mainDF$secci_fit = predict( bestmodel, type = "response")
+ggplot(mainDF)+
+  geom_point(aes(x=yearSample, y = secchiDepth))+
+  geom_smooth(aes(x=yearSample, y = secci_fit), 
+              method="glm",
+              formula = y~x,
+              method.args = list(family = Gamma(link = 'log')))+
+  scale_x_continuous(name="Year")+
+    scale_y_continuous(name = "Secchi depth (m)")+
+  theme_minimal()
+
 
 ####################################################################
 
@@ -92,12 +107,12 @@ mainDF_BsM <- filter(mainDF, samplingProgram %in% "BsM")
 clarDOCmod_gamma <- glmmTMB(DOC ~ scaled_secchi * scaled_maxDepth + lat + (1|commonID), 
                             data = mainDF_BsM, family = Gamma(link = "log"), na.action = "na.fail")   # added lat in prediction because predictions w. only secchi and maxDepth under-predicted high DOC lakes. Only included as additive effect as there's a S/N gradient in DOC across the province
 (clarDOCmod_gamma_sel <- dredge(clarDOCmod_gamma)) #additive model best
-clarDOCmod_LMM<- glmmTMB(DOC ~ scaled_secchi * scaled_maxDepth + lat + (1|commonID), 
-                            data = mainDF_BsM,  na.action = "na.fail")    
-(clarDOCmod_LMM_sel <- dredge(clarDOCmod_LMM)) #interactive model best
-clarDOCmod_logLMM<- glmmTMB(DOC ~ scaled_secchi * scaled_maxDepth + lat + (1|commonID), 
-                      data = mainDF_BsM, family = lognormal(link="log"),  na.action = "na.fail")    
-(clarDOCmod_logLMM_sel <- dredge(clarDOCmod_logLMM)) #additive model best
+# clarDOCmod_LMM<- glmmTMB(DOC ~ scaled_secchi * scaled_maxDepth + lat + (1|commonID), 
+#                             data = mainDF_BsM,  na.action = "na.fail")    
+# (clarDOCmod_LMM_sel <- dredge(clarDOCmod_LMM)) 
+# clarDOCmod_logLMM<- glmmTMB(DOC ~ scaled_secchi * scaled_maxDepth + lat + (1|commonID), 
+#                       data = mainDF_BsM, family = lognormal(link="log"),  na.action = "na.fail")    
+# (clarDOCmod_logLMM_sel <- dredge(clarDOCmod_logLMM)) 
 # AICc lowest with gamma. Do that.
 
 bestmodel2 <- glmmTMB(DOC ~ scaled_secchi + scaled_maxDepth + lat + (1|commonID),
@@ -130,24 +145,23 @@ pObsFit
 mainDF$rowID = 1:nrow(mainDF)
 newdata = mainDF %>% filter(samplingProgram == "ARU")
 newdata$ARU_DOC_predicted = predict(bestmodel2, newdata= newdata, type = "response", re.form = NA) #prediction only on fixed effects
-newdata$ARU_DOC_predicted_wRE = predict(bestmodel2, newdata= newdata, type = "response") #
-
+#newdata$ARU_DOC_predicted_wRE = predict(bestmodel2, newdata= newdata, type = "response") #
 
 updatedDOC = NA
-updatedDOC_RE = NA
+#updatedDOC_RE = NA
 for(i in 1:nrow(mainDF)){
   if(mainDF$samplingProgram[i] == "ARU"){ 
     updatedDOC[i] = newdata$ARU_DOC_predicted[which(newdata$rowID == i)]
-    updatedDOC_RE[i] = newdata$ARU_DOC_predicted_wRE[which(newdata$rowID == i)]
+ #   updatedDOC_RE[i] = newdata$ARU_DOC_predicted_wRE[which(newdata$rowID == i)]
     
   } else {
     updatedDOC[i] = mainDF$DOC[i]
-    updatedDOC_RE[i] = mainDF$DOC[i]
+   # updatedDOC_RE[i] = mainDF$DOC[i]
   }
 }
 
 mainDF$updatedDOC = updatedDOC
-mainDF$updatedDOC_RE = updatedDOC_RE
+#mainDF$updatedDOC_RE = updatedDOC_RE
 
 
 # 4) Are there differences in DOC over time? ####
@@ -168,7 +182,6 @@ M2 <- glmmTMB(updatedDOC ~ scaled_yearSample + (scaled_yearSample|commonID),
 M3 = update(M1, family = lognormal(link="log"))
 M4 = update(M2, family = lognormal(link="log"))
 AIC(M1,M2,M3,M4)
-
 # Gamma models are best. 
 
 # Parameterize best model for DOC over time
@@ -185,8 +198,17 @@ exp(sumDOC$coefficients$cond[, "Estimate"]) #DOC increases by 0.06% per year
 visreg(bestmodel3, "scaled_yearSample", scale="response")
 r.squaredGLMM(bestmodel3)          # pretty much all lake effect
 
+mainDF$DOC_fit = predict( bestmodel3, type = "response")
+ggplot(mainDF)+
+  geom_point(aes(x=yearSample, y = updatedDOC))+
+  geom_smooth(aes(x=yearSample, y = DOC_fit), 
+              method="glm",
+              formula = y~x,
+              method.args = list(family = Gamma(link = 'log')))+
+  scale_x_continuous(name="Year")+
+  scale_y_continuous(name = "DOC (mg/L)")+
+  theme_minimal()
 
-###CODY: I HAVE NOT UPDATED BELOW
 
 
 
@@ -197,9 +219,11 @@ mainDF_onlyBsM <- mainDF %>%
                                        TDP >= 5 & TDP < 10 ~ "mesotrophic",
                                        TDP >= 10 ~ "eutrophic"),
          scaledTDP = as.vector(scale(TDP, scale = FALSE)))
+
 mainDF_onlyBsM$lakeTrophicStatus <- factor(mainDF_onlyBsM$lakeTrophicStatus, 
                                            levels = c("oligotrophic","mesotrophic","eutrophic"))  # just changing order for plotting
 
+#commented out for speed
 # # Log-normal models perform much better, just start w. full log-normal model for IC
 # docSpatial <- glmmTMB(DOC ~ scaled_yearSample*scaled_maxDepth*scaledTDP*lat + (1|commonID), 
 #                    data=mainDF_onlyBsM, na.action = "na.fail", family=Gamma(link="log"))
@@ -210,16 +234,12 @@ docSpatial_catTrophicStatus <- glmmTMB(DOC ~ scaled_yearSample+
                                          scaled_maxDepth+
                                          lakeTrophicStatus+
                                          lat +
-                                         #scaled_yearSample:scaled_maxDepth+
                                          scaled_yearSample:lakeTrophicStatus+
                                          scaled_yearSample:lat+
-                                         # scaled_maxDepth:lakeTrophicStatus+
-                                         # scaled_maxDepth:lat+
-                                         # lakeTrophicStatus:lat+
                                          (1|commonID), 
                                        data=mainDF_onlyBsM, family=Gamma(link="log"), na.action = "na.fail")
 
-dredgeresults = dredge(docSpatial_catTrophicStatus)
+#dredgeresults = dredge(docSpatial_catTrophicStatus)
 
 bestmodel4=docSpatial_catTrophicStatus
 
@@ -229,6 +249,10 @@ DHARMa::simulateResiduals(bestmodel4, plot=T)
 hist(residuals(bestmodel4), breaks = 30, main = "Histogram of Residuals")
 
 #plot some stuff
+
+#Reminder: consider taking the depth variable out of the pSpatialDOC plot and 
+#if you want to show a depth thing do it as a separate plot (and maybe in the supplement)
+
 pSpatialDOC<- ggplot(mainDF_onlyBsM, aes(x=yearSample,y=DOC,colour=lat)) +
   geom_point(aes(size=maxDepth), alpha=0.7) +
   scale_colour_viridis_c(option="inferno", direction = -1) +
@@ -239,17 +263,26 @@ pSpatialDOC
 mainDF_onlyBsM$predictedDOC = predict(bestmodel4, type = "response")
 
 ggplot(mainDF_onlyBsM)+
-  geom_point(aes(y=DOC, x=scaled_maxDepth))+
-  geom_smooth(aes(y=predictedDOC, x=scaled_maxDepth), method="lm")
+  geom_point(aes(y=DOC, x=maxDepth))+
+  geom_smooth(aes(x=maxDepth, y = predictedDOC), 
+              method="glm",
+              formula = y~x,
+              method.args = list(family = Gamma(link = 'log')))+
+  scale_x_continuous(name="Maximum depth (m)")+
+  scale_y_continuous(name = "DOC (mg/L)")+
+  theme_minimal()
 
-visreg(docSpatial_catTrophicStatus, xvar = "scaled_yearSample", by = "lakeTrophicStatus",
-       gg = TRUE, overlay = TRUE) +
-  scale_y_continuous(limits=c(1,3))+
-  labs(title = "Partial Regression Plot for Interaction between scaled_yearSample and lakeTrophicStatus",
-       x = "scaled_yearSample",
-       y = "DOC")
+ggplot(mainDF_onlyBsM)+
+  geom_point(aes(y=DOC, x=yearSample))+
+  geom_smooth(aes(x=yearSample, y = predictedDOC), 
+              method="glm",
+              formula = y~x,
+              method.args = list(family = Gamma(link = 'log')))+
+  facet_wrap(~lakeTrophicStatus)+
+  scale_x_continuous(name="Year")+
+  scale_y_continuous(name = "DOC (mg/L)")+
+  theme_minimal()
 
-#consider taking the depth variable out of the pSpatialDOC plot and 
-#if you want to show a depth thing do it as a separate plot (and maybe in the supplement)
+
 
 
