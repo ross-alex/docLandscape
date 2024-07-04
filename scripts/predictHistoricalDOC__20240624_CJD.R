@@ -70,7 +70,7 @@ secLog_slopeInt <- update(secGamma_slopeInt, family=lognormal(link="log"))
 
 AIC(secGamma_int,secGamma_slopeInt,secLog_int,secLog_slopeInt)
 
-# All converged. Gamma better than lognormal. Random slopes better than just random intercept but I still 
+# All converged. Gamma better than lognormal. Random slopes better than just random intercept 
 # 
 
 # Diagnostics: CODY rejigged this
@@ -83,12 +83,12 @@ hist(residuals(bestmodel), breaks = 30, main = "Histogram of Residuals")
 (sumSecchi <- summary(bestmodel)) 
 exp(sumSecchi$coefficients$cond[, "Estimate"])#secchi decreases by 0.37% per year (1-0.9963)
 visreg(bestmodel, "scaled_yearSample", scale="response", partial = TRUE) # I think
-r.squaredGLMM(bestmodel)          # Fixed effects R2 = 0.017; random R2 = 0.75
+r.squaredGLMM(bestmodel)          # Fixed effects R2 = 0.016; random R2 = 0.78
 
 #nicer plot
-mainDF$secci_fit = predict( bestmodel, type = "response")
+mainDF$secci_fit = predict(bestmodel, type = "response")
 ggplot(mainDF)+
-  geom_point(aes(x=yearSample, y = secchiDepth))+
+  geom_point(aes(x=yearSample, y = secchiDepth), alpha=0.7, size=2.5)+
   geom_smooth(aes(x=yearSample, y = secci_fit), 
               method="glm",
               formula = y~x,
@@ -125,23 +125,26 @@ hist(residuals(bestmodel2), breaks = 30, main = "Histogram of Residuals")
 
 # Summary
 summary(bestmodel2)
-r.squaredGLMM(bestmodel2)        # R2 = 0.51 fixed effects, R2 = 0.92 w. random effects 
+r.squaredGLMM(bestmodel2)        # R2 = 0.49 fixed effects, R2 = 0.92 w. random effects 
 
 # Add predicted values to df
 predictedVals <- predict(bestmodel2, type = "response", re.form=NA) #for discussion (should random effects be used or not)
 mainDF_BsM$predictedDOC <- predictedVals
-cor(mainDF_BsM$DOC, mainDF_BsM$predictedDOC) 
+cor(mainDF_BsM$DOC, mainDF_BsM$predictedDOC)  # obs-fitted have 0.74 correlation - good
 
 ## Relationship between observed and predicted DOC for BSM data
 pObsFit <- ggplot(mainDF_BsM) +
   geom_point(aes(x=DOC,y=predictedDOC, colour = lat, size=maxDepth), alpha=0.7) +    # exp y-axis to get back on raw scale
   geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
   scale_colour_viridis_c(option="inferno", direction = -1) +
-  theme_bw()
+  ylab("Model Predicted DOC (mg/L)") +
+  xlab("Measured DOC (mg/L)") +
+  labs(colour="Latitude", size="Max. depth (m)")+
+  theme_minimal()
 pObsFit
 
 
-# 3) Estimate DOC in ARU data ####  Cody's way (maybe simpler)
+# 3) Estimate DOC in ARU data #### 
 mainDF$rowID = 1:nrow(mainDF)
 newdata = mainDF %>% filter(samplingProgram == "ARU")
 newdata$ARU_DOC_predicted = predict(bestmodel2, newdata= newdata, type = "response", re.form = NA) #prediction only on fixed effects
@@ -198,9 +201,9 @@ exp(sumDOC$coefficients$cond[, "Estimate"]) #DOC increases by 0.06% per year
 visreg(bestmodel3, "scaled_yearSample", scale="response")
 r.squaredGLMM(bestmodel3)          # pretty much all lake effect
 
-mainDF$DOC_fit = predict( bestmodel3, type = "response")
+mainDF$DOC_fit = predict( bestmodel3, type = "response", re.form = NA)
 ggplot(mainDF)+
-  geom_point(aes(x=yearSample, y = updatedDOC))+
+  geom_point(aes(x=yearSample, y = updatedDOC), alpha=0.7, size=2.5)+
   geom_smooth(aes(x=yearSample, y = DOC_fit), 
               method="glm",
               formula = y~x,
@@ -260,10 +263,10 @@ pSpatialDOC<- ggplot(mainDF_onlyBsM, aes(x=yearSample,y=DOC,colour=lat)) +
   facet_wrap(~lakeTrophicStatus)
 pSpatialDOC
 
-mainDF_onlyBsM$predictedDOC = predict(bestmodel4, type = "response")
+mainDF_onlyBsM$predictedDOC = predict(bestmodel4, type = "response", re.form = NA)
 
 ggplot(mainDF_onlyBsM)+
-  geom_point(aes(y=DOC, x=maxDepth))+
+  geom_point(aes(y=DOC, x=maxDepth), alpha=0.7, size=2.5)+
   geom_smooth(aes(x=maxDepth, y = predictedDOC), 
               method="glm",
               formula = y~x,
@@ -273,7 +276,7 @@ ggplot(mainDF_onlyBsM)+
   theme_minimal()
 
 ggplot(mainDF_onlyBsM)+
-  geom_point(aes(y=DOC, x=yearSample))+
+  geom_point(aes(y=DOC, x=yearSample), alpha=0.7, size=2.5)+
   geom_smooth(aes(x=yearSample, y = predictedDOC), 
               method="glm",
               formula = y~x,
