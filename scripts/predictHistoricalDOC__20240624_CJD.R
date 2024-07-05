@@ -86,19 +86,17 @@ visreg(bestmodel, "scaled_yearSample", scale="response", partial = TRUE) # I thi
 r.squaredGLMM(bestmodel)          # Fixed effects R2 = 0.016; random R2 = 0.78
 
 #nicer plot
-mainDF$secci_fit = predict(bestmodel, type = "response")
+mainDF$secchi_fit = predict(bestmodel, type = "response", re.form = NA)
 ggplot(mainDF)+
   geom_point(aes(x=yearSample, y = secchiDepth), alpha=0.7, size=2.5)+
-  geom_smooth(aes(x=yearSample, y = secci_fit), 
+  geom_smooth(aes(x=yearSample, y = secchi_fit), 
               method="glm",
               formula = y~x,
               method.args = list(family = Gamma(link = 'log')))+
   scale_x_continuous(name="Year")+
-    scale_y_continuous(name = "Secchi depth (m)")+
+  scale_y_continuous(name = "Secchi depth (m)")+
   theme_minimal()
 
-
-####################################################################
 
 # 2) Can we predict DOC w. lake variables? Secchi, depth, lat? ####
 mainDF_BsM <- filter(mainDF, samplingProgram %in% "BsM")
@@ -125,12 +123,34 @@ hist(residuals(bestmodel2), breaks = 30, main = "Histogram of Residuals")
 
 # Summary
 summary(bestmodel2)
-r.squaredGLMM(bestmodel2)        # R2 = 0.49 fixed effects, R2 = 0.92 w. random effects 
+r2_secchiMod <- r.squaredGLMM(bestmodel2)        # R2 = 0.49 fixed effects, R2 = 0.92 w. random effects 
+
+# Partial variance explained 
+# Fit reduced models
+model_no_secchi <- update(bestmodel2, . ~ . - scaled_secchi)
+model_no_depth <- update(bestmodel2, . ~ . - scaled_maxDepth)
+model_no_lat <- update(bestmodel2, . ~ . - lat)
+
+# Calculate R² for reduced models
+r2_no_secchi <- r.squaredGLMM(model_no_secchi)
+r2_no_depth <- r.squaredGLMM(model_no_depth)
+r2_no_lat <- r.squaredGLMM(model_no_lat)
+
+# Calculate partial R²
+partial_R2_secchi <- r2_secchiMod[1] - r2_no_secchi[1]
+partial_R2_depth <- r2_secchiMod[1] - r2_no_depth[1]
+partial_R2_lat <- r2_secchiMod[1] - r2_no_lat[1]
+
+# Print results
+cat("Partial R² for scaled_secchi: ", partial_R2_secchi, "\n")
+cat("Partial R² for scaled_maxDepth: ", partial_R2_depth, "\n")
+cat("Partial R² for lat: ", partial_R2_lat, "\n")
 
 # Add predicted values to df
 predictedVals <- predict(bestmodel2, type = "response", re.form=NA) #for discussion (should random effects be used or not)
 mainDF_BsM$predictedDOC <- predictedVals
 cor(mainDF_BsM$DOC, mainDF_BsM$predictedDOC)  # obs-fitted have 0.74 correlation - good
+cor.test(mainDF_BsM$DOC, mainDF_BsM$predictedDOC)
 
 ## Relationship between observed and predicted DOC for BSM data
 pObsFit <- ggplot(mainDF_BsM) +
@@ -197,11 +217,12 @@ hist(residuals(bestmodel3), breaks = 30, main = "Histogram of Residuals")
 
 # Model summaries
 (sumDOC <- summary(bestmodel3)) 
-exp(sumDOC$coefficients$cond[, "Estimate"]) #DOC increases by 0.06% per year
+exp(sumDOC$coefficients$cond[, "Estimate"]) #DOC increases by 0.0008% per year
 visreg(bestmodel3, "scaled_yearSample", scale="response")
 r.squaredGLMM(bestmodel3)          # pretty much all lake effect
 
 mainDF$DOC_fit = predict( bestmodel3, type = "response", re.form = NA)
+mainDF$DOC_fitWRandom = predict( bestmodel3, type = "response", re.form = NULL)  # To plot just predicted lines
 ggplot(mainDF)+
   geom_point(aes(x=yearSample, y = updatedDOC), alpha=0.7, size=2.5)+
   geom_smooth(aes(x=yearSample, y = DOC_fit), 
@@ -212,6 +233,12 @@ ggplot(mainDF)+
   scale_y_continuous(name = "DOC (mg/L)")+
   theme_minimal()
 
+ggplot(mainDF, aes(x = yearSample, y = DOC_fitWRandom, colour=lat, group = commonID)) +
+  geom_line(alpha=0.3) +
+  theme_minimal() +
+  labs(title = "Fitted Relationships Including Random Effects",
+       x = "Year",
+       y = "DOC (mg/L)")
 
 
 
@@ -250,6 +277,7 @@ bestmodel4=docSpatial_catTrophicStatus
 summary(bestmodel4)
 DHARMa::simulateResiduals(bestmodel4, plot=T)
 hist(residuals(bestmodel4), breaks = 30, main = "Histogram of Residuals")
+r.squaredGLMM(bestmodel4)         
 
 #plot some stuff
 
@@ -276,14 +304,16 @@ ggplot(mainDF_onlyBsM)+
   theme_minimal()
 
 ggplot(mainDF_onlyBsM)+
-  geom_point(aes(y=DOC, x=yearSample), alpha=0.7, size=2.5)+
+  geom_point(aes(y=DOC, x=yearSample, colour=lat), alpha=0.7, size=2.5)+
   geom_smooth(aes(x=yearSample, y = predictedDOC), 
               method="glm",
               formula = y~x,
               method.args = list(family = Gamma(link = 'log')))+
-  facet_wrap(~lakeTrophicStatus)+
+  scale_colour_viridis_c(option="inferno", direction = -1) +
+  facet_wrap(~lakeTrophicStatus, labeller = labeller(lakeTrophicStatus = function(x) str_to_title(x)))+
   scale_x_continuous(name="Year")+
   scale_y_continuous(name = "DOC (mg/L)")+
+  labs(colour="Latitude")+
   theme_minimal()
 
 
