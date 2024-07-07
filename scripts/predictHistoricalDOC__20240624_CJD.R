@@ -105,12 +105,12 @@ mainDF_BsM <- filter(mainDF, samplingProgram %in% "BsM")
 clarDOCmod_gamma <- glmmTMB(DOC ~ scaled_secchi * scaled_maxDepth + lat + (1|commonID), 
                             data = mainDF_BsM, family = Gamma(link = "log"), na.action = "na.fail")   # added lat in prediction because predictions w. only secchi and maxDepth under-predicted high DOC lakes. Only included as additive effect as there's a S/N gradient in DOC across the province
 (clarDOCmod_gamma_sel <- dredge(clarDOCmod_gamma)) #additive model best
-# clarDOCmod_LMM<- glmmTMB(DOC ~ scaled_secchi * scaled_maxDepth + lat + (1|commonID), 
-#                             data = mainDF_BsM,  na.action = "na.fail")    
-# (clarDOCmod_LMM_sel <- dredge(clarDOCmod_LMM)) 
-# clarDOCmod_logLMM<- glmmTMB(DOC ~ scaled_secchi * scaled_maxDepth + lat + (1|commonID), 
-#                       data = mainDF_BsM, family = lognormal(link="log"),  na.action = "na.fail")    
-# (clarDOCmod_logLMM_sel <- dredge(clarDOCmod_logLMM)) 
+# clarDOCmod_LMM<- glmmTMB(DOC ~ scaled_secchi * scaled_maxDepth + lat + (1|commonID),
+#                             data = mainDF_BsM,  na.action = "na.fail")
+# (clarDOCmod_LMM_sel <- dredge(clarDOCmod_LMM))
+# clarDOCmod_logLMM<- glmmTMB(DOC ~ scaled_secchi * scaled_maxDepth + lat + (1|commonID),
+#                       data = mainDF_BsM, family = lognormal(link="log"),  na.action = "na.fail")
+# (clarDOCmod_logLMM_sel <- dredge(clarDOCmod_logLMM))
 # AICc lowest with gamma. Do that.
 
 bestmodel2 <- glmmTMB(DOC ~ scaled_secchi + scaled_maxDepth + lat + (1|commonID),
@@ -253,13 +253,8 @@ mainDF_onlyBsM <- mainDF %>%
 mainDF_onlyBsM$lakeTrophicStatus <- factor(mainDF_onlyBsM$lakeTrophicStatus, 
                                            levels = c("oligotrophic","mesotrophic","eutrophic"))  # just changing order for plotting
 
-#commented out for speed
-# # Log-normal models perform much better, just start w. full log-normal model for IC
-# docSpatial <- glmmTMB(DOC ~ scaled_yearSample*scaled_maxDepth*scaledTDP*lat + (1|commonID), 
-#                    data=mainDF_onlyBsM, na.action = "na.fail", family=Gamma(link="log"))
-# dredge(docSpatial)
 
-# Also see what trophic status says rather than continous TDP
+# Model it all: full, biologically informed IC approach
 docSpatial_catTrophicStatus <- glmmTMB(DOC ~ scaled_yearSample+
                                          scaled_maxDepth+
                                          lakeTrophicStatus+
@@ -315,7 +310,3 @@ ggplot(mainDF_onlyBsM)+
   scale_y_continuous(name = "DOC (mg/L)")+
   labs(colour="Latitude")+
   theme_minimal()
-
-
-
-
