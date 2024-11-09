@@ -3,6 +3,7 @@
 
 # Load libraries
 library(tidyverse)
+library(here)
 library(lme4)
 library(lmerTest)
 library(glmmTMB)
@@ -10,6 +11,7 @@ library(MuMIn)
 library(visreg)
 library(patchwork)
 library(svglite)
+library(sf)
 source("scripts/theme_DOC.R") #load ggplot theme
 
 
