@@ -421,7 +421,7 @@ bestmodel4=glmmTMB(updatedDOC ~ scaled_yearSample+
 
 # Investigate the results
 summary(bestmodel4)
-Anova(bestmodel4)
+car::Anova(bestmodel4)
 DHARMa::simulateResiduals(bestmodel4, plot=T)
 hist(residuals(bestmodel4), breaks = 30, main = "Histogram of Residuals")
 r.squaredGLMM(bestmodel4) 
