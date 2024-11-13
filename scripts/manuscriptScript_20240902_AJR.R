@@ -443,7 +443,7 @@ pMaxDepthBsM <- ggplot(mainDF_onlyBsM)+
 pMaxDepthBsM
 
 pSpatialDOCBsM <- ggplot(mainDF_onlyBsM)+
-  geom_point(aes(y=DOC, x=yearSample, colour=lat), alpha=0.7, size=2.5)+
+  geom_point(aes(y=predictedDOC_wEnvVars, x=yearSample, colour=lat), alpha=0.7, size=2.5)+
   geom_smooth(aes(x=yearSample, y = predictedDOC_wEnvVars), 
               method="glm",
               formula = y~x,
@@ -455,6 +455,32 @@ pSpatialDOCBsM <- ggplot(mainDF_onlyBsM)+
   labs(colour="Latitude")+
   theme_DOC() 
 pSpatialDOCBsM
+
+#Cody approach to plotting partial regressions
+# newdata = mainDF_onlyBsM
+# newdata$lat2 = newdata$lat
+# newdata$lat = mean(newdata$lat)
+# newdata$scaled_maxDepth = mean(newdata$scaled_maxDepth)
+# 
+# newdata$predictedDOC_wEnvVars = predict(bestmodel4, 
+#                                         newdata = newdata, 
+#                                         type = "response", re.form = NA)
+# 
+# ggplot(newdata)+
+#   geom_point(aes(y=DOC, x=yearSample, colour=lat2), alpha=0.7, size=2.5)+
+#   geom_smooth(aes(x=yearSample, y = predictedDOC_wEnvVars), 
+#               method="glm",
+#               formula = y~x,
+#               method.args = list(family = Gamma(link = 'log')))+
+#   scale_colour_viridis_c(option="inferno", direction = -1) +
+#   facet_wrap(~lakeTrophicStatus, labeller = labeller(lakeTrophicStatus = function(x) str_to_title(x)))+
+#   scale_x_continuous(name="Year")+
+#   scale_y_continuous(name = "DOC (mg/L)")+
+#   labs(colour="Latitude")+
+#   theme_DOC()
+
+
+
 
 # Summarize modelled differences in DOC over time period for each trophic group
 # Extract data from plot above - want the min/max of the fitted lines
