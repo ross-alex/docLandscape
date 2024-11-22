@@ -120,11 +120,13 @@ pObsFit <- ggplot(mainDF_BsM) +
   ylab("Model Predicted DOC (mg/L)") +
   xlab("Measured DOC (mg/L)") +
   labs(colour="Latitude", size="Max. depth (m)")+
+  ylim(c(0,21))+
+  xlim(c(0,21)) +
   theme_minimal() +
   theme_DOC()
 pObsFit
 
-# ggsave(filename = ("plotsTables/plots/obsFittedDOC_20240713.png"),device = "png", plot = pObsFit, 
+# ggsave(filename = ("plotsTables/plots/obsFittedDOC_20241118.png"),device = "png", plot = pObsFit,
 #        width = 7, height = 6, units = "in", dpi = 450)
 
 # If we do the same with secchi, do predictors have the same sign ####
@@ -234,7 +236,7 @@ mainDF_onlyBsM$DOC_fitWRandom = predict( bestmodel3a, type = "response", re.form
 
 # Plot it:
 pDOCTime_bsm <- ggplot(data=mainDF_onlyBsM,aes(x=yearSample,y=updatedDOC)) +
-  geom_point(aes(x=yearSample, y = updatedDOC, fill=updatedDOC), alpha=0.7, size=2.5, shape = 21) +
+  geom_jitter(aes(x=yearSample, y = updatedDOC, fill=updatedDOC), alpha=0.7, size=2.5, shape=21, width = 0.25) +
   #geom_smooth(method = "lm") +      # Don't plot line as relationship not significant
   scale_fill_gradientn(colours = c("#F5DEB3","#D2B48C","#704214","#3D2B1F")) +
   labs(y="DOC (mg/L)",x="Year") +
@@ -242,7 +244,7 @@ pDOCTime_bsm <- ggplot(data=mainDF_onlyBsM,aes(x=yearSample,y=updatedDOC)) +
   theme(legend.position = "none")
 pDOCTime_bsm
 
-# ggsave(filename = ("plotsTables/plots/DOCTime_bsm_20240829.svg"),device = "svg", plot = pDOCTime_bsm,
+# ggsave(filename = ("plotsTables/plots/DOCTime_bsm_20241118.svg"),device = "svg", plot = pDOCTime_bsm,
 #        width = 8, height = 6)
 
 ## Secchi - do we see consistent trends with DOC?
@@ -272,7 +274,7 @@ mainDF_onlyBsM$Secchi_fit = predict( secchiBsmMod_year, type = "response", re.fo
 mainDF_onlyBsM$Secchi_fitWRandom = predict( secchiBsmMod_year, type = "response", re.form = NULL)  # To plot just predicted lines
 
 secchiBsmYearPlot <- ggplot(mainDF_onlyBsM)+
-  geom_point(aes(x=yearSample, y = secchiDepth, fill=secchiDepth), alpha=0.7, size=2.5, shape=21)+
+  geom_jitter(aes(x=yearSample, y = Secchi_fitWRandom, fill=secchiDepth), alpha=0.7, size=2.5, shape=21, width = 0.25)+
   geom_smooth(aes(x=yearSample, y = Secchi_fitWRandom), 
               method="glm",
               formula = y~x,
@@ -283,6 +285,9 @@ secchiBsmYearPlot <- ggplot(mainDF_onlyBsM)+
   theme_DOC()+
   theme(legend.position = "none")
 secchiBsmYearPlot
+
+# ggsave(filename = ("plotsTables/plots/secchiTime_bsm_20241118.svg"),device = "svg", plot = secchiBsmYearPlot,
+#        width = 8, height = 6)
 
 # Summarize modelled differences in Secchi over time period for each trophic group
 # Extract data from plot above - want the min/max of the fitted lines
@@ -321,7 +326,7 @@ docBsMTimeDat
 pDOCtimeDiff_BsM <- ggplot() +
   geom_sf(data = ontario_shapefile, fill = NA, color = "black") +
   geom_point(data=docBsMTimeDat, aes(y=lat,x=long,fill=diffDOC,size=yearDiffDOC), 
-             shape = 21, stroke = 0.5, colour = "black") +
+             shape = 21, stroke = 0.5, colour = "black", alpha=0.7) +
   scale_fill_gradient2(
     low = "#aa95cd",           
     mid = "white",         
@@ -349,7 +354,7 @@ pDOCTimeDiff_BsM_legRight = pDOCtimeDiff_BsM +
 pSecchitimeDiff_BsM <- ggplot() +
   geom_sf(data = ontario_shapefile, fill = NA, color = "black") +
   geom_point(data=docBsMTimeDat, aes(y=lat,x=long,fill=diffSecchi,size=yearDiffDOC), 
-             shape = 21, stroke = 0.5, colour = "black") +
+             shape = 21, stroke = 0.5, colour = "black", alpha=0.7) +
   scale_fill_gradient2(
     high = "#aa95cd",            
     mid = "white",         
@@ -369,7 +374,7 @@ pSecchiTimeDiff_BsM_legTop = pSecchitimeDiff_BsM +
 waterClarBsM_panelPlot <- pDOCTime_bsm+secchiBsmYearPlot+pDOCtimeDiff_BsM+pSecchitimeDiff_BsM + plot_layout(heights = c(1.5,2))
 
 # Save as svg
-# ggsave(filename = ("plotsTables/plots/waterClarBsM_panelPlot_20240901.svg"),device = "svg", plot = waterClarBsM_panelPlot,
+# ggsave(filename = ("plotsTables/plots/waterClarBsM_panelPlot_20241118.svg"),device = "svg", plot = waterClarBsM_panelPlot,
 #        width = 12, height = 12)
 
 ## Change in DOC and Secchi with environmental variables; ONLY BsM ####
@@ -426,49 +431,54 @@ DHARMa::simulateResiduals(bestmodel4, plot=T)
 hist(residuals(bestmodel4), breaks = 30, main = "Histogram of Residuals")
 r.squaredGLMM(bestmodel4) 
 
+# Predict **only use this for maxDepth**; can't parse out mean lakeTrophicStatus
 mainDF_onlyBsM$predictedDOC_wEnvVars = predict(bestmodel4, type = "response", re.form = NA)
 mainDF_onlyBsM$predictedDOC_wRandomEnvVars = predict(bestmodel4, type = "response",re.form = NULL)
 
 pMaxDepthBsM <- ggplot(mainDF_onlyBsM)+
-  geom_point(aes(y=DOC, x=maxDepth, fill=DOC), alpha=0.7, size=2.5, shape=21)+
+  geom_point(aes(y=DOC, x=maxDepth, fill=DOC), alpha=0.5, size=2.5, shape=21)+
   geom_smooth(aes(x=maxDepth, y = predictedDOC_wEnvVars), 
               method="glm",
               formula = y~x,
               method.args = list(family = Gamma(link = 'log')))+
   scale_x_continuous(name="Maximum depth (m)")+
   scale_y_continuous(name = "DOC (mg/L)")+
+  ylim(c(0,21)) +
   scale_fill_gradientn(colours = c("#F5DEB3","#D2B48C","#704214","#3D2B1F")) +
   theme_DOC()+
   theme(legend.position="none")
 pMaxDepthBsM
 
-pSpatialDOCBsM <- ggplot(mainDF_onlyBsM)+
-  geom_point(aes(y=predictedDOC_wEnvVars, x=yearSample, colour=lat), alpha=0.7, size=2.5)+
-  geom_smooth(aes(x=yearSample, y = predictedDOC_wEnvVars), 
+
+# Plot partial regressions of interaction between year and trophic status
+newdata = mainDF_onlyBsM
+newdata$lat2 = newdata$lat
+newdata$lat = mean(newdata$lat)
+newdata$scaled_maxDepth = mean(newdata$scaled_maxDepth)
+
+newdata$predictedDOC_wEnvVars = predict(bestmodel4,
+                                        newdata = newdata,
+                                        type = "response", re.form = NA)
+
+pSpatialDOCBsM <- ggplot(newdata)+
+  #geom_jitter(data = mainDF_onlyBsM, aes(y=predictedDOC_wEnvVars, x=yearSample, colour=lat), alpha=0.4, size=2.5, width=0.22)+
+  geom_jitter(aes(y=DOC, x=yearSample, colour=lat2), alpha=0.3, size=2, width=0.22)+
+  geom_smooth(aes(x=yearSample, y = predictedDOC_wEnvVars),
               method="glm",
               formula = y~x,
               method.args = list(family = Gamma(link = 'log')))+
   scale_colour_viridis_c(option="inferno", direction = -1) +
   facet_wrap(~lakeTrophicStatus, labeller = labeller(lakeTrophicStatus = function(x) str_to_title(x)))+
-  scale_x_continuous(name="Year")+
-  scale_y_continuous(name = "DOC (mg/L)")+
-  labs(colour="Latitude")+
-  theme_DOC() 
+  ylim(c(0,21)) +
+  labs(colour="Latitude", y="DOC (mg/L)", x="Year" )+
+  theme_DOC()
 pSpatialDOCBsM
 
-#Cody approach to plotting partial regressions
-# newdata = mainDF_onlyBsM
-# newdata$lat2 = newdata$lat
-# newdata$lat = mean(newdata$lat)
-# newdata$scaled_maxDepth = mean(newdata$scaled_maxDepth)
-# 
-# newdata$predictedDOC_wEnvVars = predict(bestmodel4, 
-#                                         newdata = newdata, 
-#                                         type = "response", re.form = NA)
-# 
-# ggplot(newdata)+
-#   geom_point(aes(y=DOC, x=yearSample, colour=lat2), alpha=0.7, size=2.5)+
-#   geom_smooth(aes(x=yearSample, y = predictedDOC_wEnvVars), 
+#Below is using 'predict' function data where all model variables are influencing fitted relationship. Likely not right
+# pSpatialDOCBsM <- ggplot(mainDF_onlyBsM)+
+#   #geom_point(aes(y=DOC, x=yearSample, colour=lat, size = scaled_maxDepth), alpha=0.7)+
+#   geom_jitter(aes(y=DOC, x=yearSample, colour=lat, size = scaled_maxDepth), alpha=0.7, width=0.22)+
+#   geom_smooth(aes(x=yearSample, y = predictedDOC_wEnvVars),
 #               method="glm",
 #               formula = y~x,
 #               method.args = list(family = Gamma(link = 'log')))+
@@ -478,9 +488,10 @@ pSpatialDOCBsM
 #   scale_y_continuous(name = "DOC (mg/L)")+
 #   labs(colour="Latitude")+
 #   theme_DOC()
+# pSpatialDOCBsM
 
-
-
+pPartial <- plot(effects::predictorEffects(bestmodel4, ~ scaled_yearSample, partial.residuals=TRUE),id=list(n=1))
+pPartial
 
 # Summarize modelled differences in DOC over time period for each trophic group
 # Extract data from plot above - want the min/max of the fitted lines
@@ -519,7 +530,7 @@ mainDF_onlyBsM$predictedSecchi_wEnvVars = predict(secchiSpatial_catTrophicStatus
 mainDF_onlyBsM$predictedSecchi_wRandomEnvVars = predict(secchiSpatial_catTrophicStatus, type = "response",re.form = NULL)
 
 pMaxDepth_sec_BsM <- ggplot(mainDF_onlyBsM)+
-  geom_point(aes(y=secchiDepth, x=maxDepth, fill = secchiDepth), alpha=0.7, size=2.5, shape = 21)+
+  geom_point(aes(y=secchiDepth, x=maxDepth, fill = secchiDepth), alpha=0.5, size=2.5, shape = 21)+
   geom_smooth(aes(x=maxDepth, y = predictedSecchi_wEnvVars), 
               method="glm",
               formula = y~x,
@@ -528,24 +539,32 @@ pMaxDepth_sec_BsM <- ggplot(mainDF_onlyBsM)+
   scale_y_continuous(name = "Secchi depth (m)")+
   scale_fill_gradientn(colours = c("#3D2B1F","#704214", "#D2B48C", "#F5DEB3")) +
   theme_DOC()+
+  #ylim(c(0,21)) +
   theme(legend.position = "none")
 pMaxDepth_sec_BsM
 
-pSpatialSecBsM <- ggplot(data=arrange(mainDF_onlyBsM,yearSample))+
-  geom_point(aes(y=secchiDepth, x=yearSample, colour=lat), alpha=0.7, size=2.5)+
-  # geom_line(aes(y=predictedSecchi, x=as.numeric(yearSample), 
-  #              group = interaction(lakeTrophicStatus,lat)))+
-  stat_smooth(aes(x=yearSample, y = predictedSecchi_wEnvVars),
+## Plot only partial regression containing trophic status * year interaction
+newdata_sec = mainDF_onlyBsM
+newdata_sec$lat2 = newdata_sec$lat
+newdata_sec$lat = mean(newdata_sec$lat)
+newdata_sec$scaled_maxDepth = mean(newdata_sec$scaled_maxDepth)
+
+newdata_sec$predictedSecchi_wEnvVars = predict(secchiSpatial_catTrophicStatus,
+                                        newdata = newdata_sec,
+                                        type = "response", re.form = NA)
+
+pSpatialSecBsM <- ggplot(newdata_sec)+
+  geom_jitter(data = mainDF_onlyBsM, aes(y=secchiDepth, x=yearSample, colour=lat), alpha=0.3, size=2, width=0.22)+
+  geom_smooth(aes(x=yearSample, y = predictedSecchi_wEnvVars),
               method="glm",
               formula = y~x,
               method.args = list(family = Gamma(link = 'log')))+
   scale_colour_viridis_c(option="inferno", direction = -1) +
   facet_wrap(~lakeTrophicStatus, labeller = labeller(lakeTrophicStatus = function(x) str_to_title(x)))+
   scale_x_continuous(name="Year")+
-  #scale_y_reverse() +
-  #scale_y_reverse(transform = scales::transform_reverse())+
   scale_y_continuous(name = "Secchi depth (m)") +  
   labs(colour="Latitude")+
+ # ylim(c(0,21)) +
   theme_DOC() 
 pSpatialSecBsM
 
@@ -567,10 +586,10 @@ sumSec_timeBsM <- lineData_sec %>%
 spatioTempBsM_panelPlot <- pSpatialDOCBsM + pMaxDepthBsM + plot_layout(ncol = 1)
 spatioTempSecchiBsM_panelPlot <- pSpatialSecBsM + pMaxDepth_sec_BsM + plot_layout(ncol = 1)
 
-# ggsave(filename = ("plotsTables/plots/spatioTempBsM_panelPlot_20240902.svg"),device = "svg", plot = spatioTempBsM_panelPlot,
+# ggsave(filename = ("plotsTables/plots/spatioTempBsM_panelPlot_20241118.svg"),device = "svg", plot = spatioTempBsM_panelPlot,
 #         width = 8, height = 6,bg="white")
 # 
-# ggsave(filename = ("plotsTables/plots/spatioTempSecchiBsM_panelPlot_20240902.svg"),device = "svg", plot = spatioTempSecchiBsM_panelPlot,
+# ggsave(filename = ("plotsTables/plots/spatioTempSecchiBsM_panelPlot_20241118.svg"),device = "svg", plot = spatioTempSecchiBsM_panelPlot,
 #        width = 8, height = 6,bg="white")
 
 
@@ -712,7 +731,7 @@ docTimeDat
 pDOCtimeDiff <- ggplot() +
   geom_sf(data = ontario_shapefile, fill = NA, color = "black") +
   geom_point(data=docTimeDat, aes(y=lat,x=long,fill=diffDOC,size=yearDiffDOC), 
-             shape = 21, stroke = 0.5, colour = "black") +
+             shape = 21, stroke = 0.5, colour = "black", alpha=0.7) +
   scale_fill_gradient2(
     low = "navyblue",          
     mid = "white",         
@@ -728,7 +747,7 @@ pDOCtimeDiff
 pSecchitimeDiff <- ggplot() +
   geom_sf(data = ontario_shapefile, fill = NA, color = "black") +
   geom_point(data=docTimeDat, aes(y=lat,x=long,fill=diffSecchi,size=yearDiffDOC), 
-             shape = 21, stroke = 0.5, colour = "black") +
+             shape = 21, stroke = 0.5, colour = "black",alpha=0.7) +
   scale_fill_gradient2(
     high = "navyblue",          
     mid = "white",         
@@ -742,7 +761,7 @@ pSecchitimeDiff
 
 waterClar_panelPlot <- pDOC_allData_time+pSecchi_allData_time+pDOCtimeDiff+pSecchitimeDiff + plot_layout(heights = c(1.5,2))
 
-# ggsave(filename = ("plotsTables/plots/waterClar_panelPlot_updated_20240830.svg"),device = "svg", plot = waterClar_panelPlot,
+# ggsave(filename = ("plotsTables/plots/waterClar_panelPlot_updated_20241118.svg"),device = "svg", plot = waterClar_panelPlot,
 #        width = 12, height = 12)
 
 
@@ -778,6 +797,16 @@ summary(secchiSpatial_catTrophicStatus_allData)
 mainDF_secMod$predictedSecchi = predict(secchiSpatial_catTrophicStatus_allData, type = "response", re.form = NA)
 mainDF_secMod$predictedSecchi_wRandom = predict(secchiSpatial_catTrophicStatus_allData, type = "response",re.form = NULL)
 
+# Plot partial regressions of interaction between year and trophic status
+newdata_allSec = mainDF_secMod
+newdata_allSec$lat2 = newdata_allSec$lat
+newdata_allSec$lat = mean(newdata_allSec$lat)
+newdata_allSec$scaled_maxDepth = mean(newdata_allSec$scaled_maxDepth)
+
+newdata_allSec$predictedSecchi = predict(secchiSpatial_catTrophicStatus_allData,
+                                        newdata = newdata_allSec,
+                                        type = "response", re.form = NA)
+
 pMaxDepth_secAll <- ggplot(mainDF_secMod)+
   geom_point(aes(y=secchiDepth, x=maxDepth, fill = secchiDepth), alpha=0.7, size=2.5, shape = 21)+
   geom_smooth(aes(x=maxDepth, y = predictedSecchi), 
@@ -792,13 +821,12 @@ pMaxDepth_secAll <- ggplot(mainDF_secMod)+
 pMaxDepth_secAll
 
 pSpatialSecAll <- ggplot(data=arrange(mainDF_secMod,yearSample))+
-  geom_point(aes(y=secchiDepth, x=yearSample, colour=lat), alpha=0.7, size=2.5)+
-  # geom_line(aes(y=predictedSecchi, x=as.numeric(yearSample), 
-  #              group = interaction(lakeTrophicStatus,lat)))+
-  stat_smooth(aes(x=yearSample, y = predictedSecchi),
+  geom_point(aes(y=secchiDepth, x=yearSample, colour=lat), alpha=0.3, size=2)+
+  stat_smooth(data=newdata_allSec, aes(x=yearSample, y = predictedSecchi),
               method="glm",
               formula = y~x,
-              method.args = list(family = Gamma(link = 'log')))+
+              method.args = list(family = Gamma(link = 'log')),
+              se=TRUE)+
   scale_colour_viridis_c(option="inferno", direction = -1) +
   facet_wrap(~lakeTrophicStatus, labeller = labeller(lakeTrophicStatus = function(x) str_to_title(x)))+
   scale_x_continuous(name="Year")+
@@ -812,7 +840,7 @@ pSpatialSecAll
 
 spatioTemp_panelPlotAll <- pSpatialSecAll + pMaxDepth_secAll + plot_layout(ncol = 1)
 
-# ggsave(filename = ("plotsTables/plots/spatioTemp_panelPlotAll_20240902.svg"),device = "svg", plot = spatioTemp_panelPlotAll,
+# ggsave(filename = ("plotsTables/plots/spatioTemp_panelPlotAll_20241118.svg"),device = "svg", plot = spatioTemp_panelPlotAll,
 #        width = 8, height = 6,bg="white")
 
 # Summarize modelled differences in Secchi over time period for each trophic group
