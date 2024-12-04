@@ -24,13 +24,13 @@
      inkscape:deskcolor="#505050"
      inkscape:document-units="pt"
      inkscape:zoom="0.81944444"
-     inkscape:cx="123.86441"
-     inkscape:cy="225.76271"
-     inkscape:window-width="2560"
-     inkscape:window-height="1387"
-     inkscape:window-x="1512"
-     inkscape:window-y="25"
-     inkscape:window-maximized="1"
+     inkscape:cx="123.25424"
+     inkscape:cy="226.37288"
+     inkscape:window-width="712"
+     inkscape:window-height="480"
+     inkscape:window-x="0"
+     inkscape:window-y="38"
+     inkscape:window-maximized="0"
      inkscape:current-layer="svg2616" />
   <defs
      id="defs1">
@@ -454,7 +454,10 @@
     </clipPath>
   </defs>
   <g
-     id="g2635">
+     id="g2635"
+     inkscape:export-filename="spatioTemp_panelPlot_edited_20241118.png"
+     inkscape:export-xdpi="450"
+     inkscape:export-ydpi="450">
     <rect
        width="100%"
        height="100%"

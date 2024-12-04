@@ -17,11 +17,6 @@ source("scripts/theme_DOC.R") #load ggplot theme
 
 ## Read Data ####
 combIDs <- read_csv(here("data/commonDataIDs_aruToBsm_20240307.csv")) #has common IDs between BsM and ARU
-allBsm <- read_csv("data/allBsM_updatedCyc3_20240520.csv") %>%
-  left_join(select(combIDs, bsmWaterbodyID, commonID), by = c("waterbodyID" = "bsmWaterbodyID"))
-allARU <- read_csv(here("data/ARU_modelData_20240311.csv")) %>% 
-  left_join(select(combIDs, ARU_LID, commonID), by = "ARU_LID") %>% 
-  filter(TDS < 300) #Different linear relationship for saline lakes in Chow-Fraser (1991); only ~50/9000 observations being removed
 statDat_wide <- read_csv("data/statDatWide_updatedCyc3_20240520.csv") %>% 
   filter(log(TKN) >4) %>%  # Clear outliers < 4 (only two observations)                       
   left_join(select(combIDs, bsmWaterbodyID, commonID), by = c("waterbodyID" = "bsmWaterbodyID"))
@@ -29,30 +24,7 @@ statDat_wide <- read_csv("data/statDatWide_updatedCyc3_20240520.csv") %>%
 ontario_shapefile <- st_read("data/Province/Province.shp")
 ontario_shapefile <-st_transform(ontario_shapefile, crs = 4326)
 
-# Estimate TP from TDS and apply a trophic status
-aruDat <- allARU %>% 
-  left_join(select(combIDs,ARU_LID,commonID)) %>% 
-  mutate(logTP = 0.95*log(TDS)-0.669,                                         #This formula is from Chow-Fraser (1991)
-         TP = exp(logTP),
-         lakeTrophicStatus = case_when(TP < 10 ~ "oligotrophic",
-                                       TP >= 10 & TP < 20 ~ "mesotrophic",
-                                       TP >= 20 ~ "eutrophic")) %>% 
-  filter(!is.na(commonID)) %>% 
-  rename(secchiDepth = SECCHI,yearSample = INV_YR, maxDepth = DEPMAX, lat=latARU,long=longARU) 
-
-# Main dataset combining ARU and BsM
-mainDF <- bind_rows(statDat_wide,aruDat) %>% 
-  filter(!is.na(yearSample)) %>% filter(!is.na(commonID))
-mainDF = mainDF %>% filter(!is.na(secchiDepth)) %>% filter(!is.na(maxDepth))
-
-todrop <- mainDF %>% group_by(commonID) %>% summarize(count = n()) %>% arrange(count) %>% filter(count == 1)
-mainDF <- mainDF[-which(mainDF$commonID %in% todrop$commonID),]
-mainDF$scaled_yearSample <- as.vector(scale(mainDF$yearSample, scale = FALSE)) # Create scaledYear. scale=F so that a 1 unit change still represents 1 year 
-mainDF$scaled_secchi <- as.vector(scale(mainDF$secchiDepth, scale = FALSE)) # Create scaledYear. scale=F so that a 1 unit change still represents 1 year 
-mainDF$scaled_maxDepth <- as.vector(scale(mainDF$maxDepth, scale = FALSE)) # Create scaledYear. scale=F so that a 1 unit change still represents 1 year 
-mainDF$samplingProgram <- if_else(mainDF$scaled_yearSample >= 0, "BsM", "ARU")
-
-#write_csv(mainDF,"data/dataForDryadRepo_landscapeDOC_AR_20241122.csv")
+mainDF <- read_csv("data/dataForDryadRepo_landscapeDOC_AR_20241122.csv")
 
 # Can we predict DOC w. lake variables? Secchi, depth, lat? ####
 mainDF_BsM <- filter(mainDF, samplingProgram %in% "BsM")
@@ -230,7 +202,6 @@ hist(residuals(bestmodel3a), breaks = 30, main = "Histogram of Residuals")
 # Model summaries
 (sumDOCa <- summary(bestmodel3a)) 
 exp(sumDOCa$coefficients$cond[, "Estimate"]) #DOC decrease by 0.0032% per year; NS
-visreg(bestmodel3a, "scaled_yearSample", scale="response")
 r.squaredGLMM(bestmodel3a)          # pretty much all lake effect
 
 mainDF_onlyBsM$DOC_fit = predict( bestmodel3a, type = "response", re.form = NA)
@@ -316,9 +287,9 @@ docBsMTimeDat <- mainDF_onlyBsM %>%
             finalSecchi = secchiDepth[which.max(yearSample)],
             diffSecchi = finalSecchi-initSecchi,
             sampleSize = n()) %>% 
-  left_join(select(statDat_wide,commonID,lat,long)) %>% 
-  distinct() %>% 
-  filter(!is.na(lat)& yearDiffDOC >0) %>% 
+  left_join(select(statDat_wide,commonID,lat,long)) %>%
+  distinct() %>%
+  filter(!is.na(lat)& yearDiffDOC >0) %>%
   mutate(dataset = "all")
 docBsMTimeDat
 
@@ -670,7 +641,6 @@ hist(residuals(bestmodel3_sec), breaks = 30, main = "Histogram of Residuals")
 # Model summaries
 (sumSec_allDat_noEnv <- summary(bestmodel3_sec)) 
 exp(sumSec_allDat_noEnv$coefficients$cond[, "Estimate"]) #Secchi decreases by 0.37% per year; (3.61% decrease per decade); 0.18 m decrease per decade
-visreg(sumSec_allDat_noEnv, "scaled_yearSample", scale="response")
 r.squaredGLMM(sumSec_allDat_noEnv)          # pretty much all lake effect
 
 mainDF$Secchi_fit_allData_noEnv = predict( bestmodel3_sec, type = "response", re.form = NA)
@@ -761,15 +731,13 @@ waterClar_panelPlot <- pDOC_allData_time+pSecchi_allData_time+pDOCtimeDiff+pSecc
 
 ## Using ALL data, see if BsM enviro results hold w. Secchi ####
 # Expect similar direction and magnitude of effects
-mainDF_secMod <- mainDF %>% 
+mainDF_secMod <- mainDF %>%
   group_by(commonID) %>%
-  mutate(lakeTrophicStatus = ifelse(is.na(lakeTrophicStatus), 
-                                    unique(lakeTrophicStatus[!is.na(lakeTrophicStatus)]), 
-                                    lakeTrophicStatus)) %>% 
-  filter(!is.na(scaled_yearSample) & 
-           !is.na(lakeTrophicStatus) &
-           !is.na(lat) &
-           !is.na(secchiDepth))
+  mutate(lakeTrophicStatus = case_when(
+    TDP < 5 ~ "oligotrophic",
+    TDP >= 5 & TDP < 10 ~ "mesotrophic",
+    TDP >= 10 ~ "eutrophic")) %>%
+  fill(lakeTrophicStatus, .direction = "downup")  # Fill NAs for ARU observations within each commonID
 
 mainDF_secMod$lakeTrophicStatus <- factor(mainDF_secMod$lakeTrophicStatus, 
                                           levels = c("oligotrophic","mesotrophic","eutrophic"))  # just changing order for plotting
@@ -834,7 +802,7 @@ pSpatialSecAll
 
 spatioTemp_panelPlotAll <- pSpatialSecAll + pMaxDepth_secAll + plot_layout(ncol = 1)
 
-# ggsave(filename = ("plotsTables/plots/spatioTemp_panelPlotAll_20241118.svg"),device = "svg", plot = spatioTemp_panelPlotAll,
+# ggsave(filename = ("plotsTables/plots/spatioTemp_panelPlotAll_20241122.svg"),device = "svg", plot = spatioTemp_panelPlotAll,
 #        width = 8, height = 6,bg="white")
 
 # Summarize modelled differences in Secchi over time period for each trophic group

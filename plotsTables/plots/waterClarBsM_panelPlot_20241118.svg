@@ -24,13 +24,13 @@
      inkscape:deskcolor="#505050"
      inkscape:document-units="pt"
      inkscape:zoom="0.57943472"
-     inkscape:cx="1207.211"
-     inkscape:cy="869.81325"
-     inkscape:window-width="2560"
-     inkscape:window-height="1387"
-     inkscape:window-x="1512"
-     inkscape:window-y="25"
-     inkscape:window-maximized="1"
+     inkscape:cx="1206.3481"
+     inkscape:cy="868.95034"
+     inkscape:window-width="712"
+     inkscape:window-height="480"
+     inkscape:window-x="0"
+     inkscape:window-y="38"
+     inkscape:window-maximized="0"
      inkscape:current-layer="svg3526" />
   <defs
      id="defs1">
@@ -543,7 +543,10 @@
     </clipPath>
   </defs>
   <g
-     id="g3527">
+     id="g3527"
+     inkscape:export-filename="waterClar_panelPlot_20241118.png"
+     inkscape:export-xdpi="450"
+     inkscape:export-ydpi="450">
     <rect
        style="fill:#ffffff;stroke:#ffffff;stroke-width:1.40904;stroke-opacity:1"
        id="rect3526"
