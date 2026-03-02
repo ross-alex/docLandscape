@@ -23,6 +23,8 @@ statDat_wide <- read_csv("data/statDatWide_updatedCyc3_20240520.csv") %>%
 # Ontario shapefile: 
 ontario_shapefile <- st_read("data/Province/Province.shp")
 ontario_shapefile <-st_transform(ontario_shapefile, crs = 4326)
+ontario_ohnWaterbody_latlon <- read_csv("data/ohnWaterbodies_csvWithCoords.csv") %>% 
+  mutate(geoRegion = if_else(Latitude > 47, "North (> 47° N)", "South (< 47° N)"))
 
 mainDF <- read_csv("data/dataForDryadRepo_landscapeDOC_AR_20241122.csv")
 
@@ -82,9 +84,11 @@ cat("Partial R² for int: ", partial_R2_int, "\n")
 
 # Add predicted values to df
 predictedVals <- predict(bestmodel2, type = "response", re.form=NA) #for discussion (should random effects be used or not)
+predictedVals <- predict(bestmodel2, type = "response", re.form=NULL) #for discussion (should random effects be used or not)
 mainDF_BsM$predictedDOC <- predictedVals
 cor(mainDF_BsM$DOC, mainDF_BsM$predictedDOC)  # obs-fitted have 0.75 correlation - good
 cor.test(mainDF_BsM$DOC, mainDF_BsM$predictedDOC)
+r.squaredGLMM(bestmodel2)
 
 ## Relationship between observed and predicted DOC for BSM data
 pObsFit <- ggplot(mainDF_BsM) +
@@ -296,18 +300,20 @@ docBsMTimeDat
 ## Make maps of deltaDOC and deltaSecchi
 ## Map of DOC, only BsM
 pDOCtimeDiff_BsM <- ggplot() +
-  geom_sf(data = ontario_shapefile, fill = NA, color = "black") +
-  geom_point(data=docBsMTimeDat, aes(y=lat,x=long,fill=diffDOC,size=yearDiffDOC), 
-             shape = 21, stroke = 0.5, colour = "black", alpha=0.7) +
-  scale_fill_gradient2(
-    low = "#aa95cd",           
-    mid = "white",         
-    high = "brown",     
-    midpoint = 0)+  
-  ylim(c(42.5,55)) +
+ # geom_sf(data = ontario_shapefile, fill = NA, color = "black",lwd=1.5) +
+  geom_point(data = ontario_ohnWaterbody_latlon, 
+             aes(x=Longitude,y=Latitude),size=1,alpha=0.1) +
+  # geom_point(data=docBsMTimeDat, aes(y=lat,x=long,fill=diffDOC,size=yearDiffDOC), 
+  #            shape = 21, stroke = 0.5, colour = "black", alpha=0.7) +
+  # scale_fill_gradient2(
+  #   low = "#aa95cd",           
+  #   mid = "white",         
+  #   high = "brown",     
+  #   midpoint = 0)+  
+  ylim(c(42.5,57)) +
   labs(y="Latitude",x="Longitude",fill="Δ DOC (mg/L)",size="Sample period (years)") +
   theme_DOC()  +
-  theme(legend.position = "none")
+  theme(legend.position = "right")
 pDOCtimeDiff_BsM
 
 pDOCTimeDiff_BsM_legTop = pDOCtimeDiff_BsM +
@@ -339,7 +345,7 @@ pSecchitimeDiff_BsM <- ggplot() +
 pSecchitimeDiff_BsM
 
 pSecchiTimeDiff_BsM_legTop = pSecchitimeDiff_BsM +
-  theme(legend.position = "top")  #This is just to add legend to plot (custom)
+  theme(legend.position = "right")  #This is just to add legend to plot (custom)
 # ggsave(filename = ("plotsTables/plots/secchi_bsmMap_legTop_20240901.svg"),device = "svg", plot = pSecchiTimeDiff_BsM_legTop,
 #        width = 8, height = 6)
 
@@ -431,12 +437,27 @@ newdata$predictedDOC_wEnvVars = predict(bestmodel4,
                                         newdata = newdata,
                                         type = "response", re.form = NA)
 
+# Need 95%CIs to plot; function to predict from bootstrapped models
+bootFun <- function(model) {
+  predict(model, newdata = newdata, type = "response", re.form = NA)
+}
+
+# Perform bootstrapping (adjust nsim for precision vs. speed)
+bootResults <- bootMer(bestmodel4, FUN = bootFun, nsim = 1000, re.form = NA)
+
+# Compute confidence intervals
+newdata$predictedDOC_wEnvVars <- predict(bestmodel4, newdata = newdata, type = "response", re.form = NA)
+newdata$lwr <- apply(bootResults$t, 2, quantile, probs = 0.025)  # 2.5% CI
+newdata$upr <- apply(bootResults$t, 2, quantile, probs = 0.975)  # 97.5% CI
+
 pSpatialDOCBsM <- ggplot(newdata)+
   geom_jitter(aes(y=DOC, x=yearSample, colour=lat2), alpha=0.3, size=2, width=0.22)+
   geom_smooth(aes(x=yearSample, y = predictedDOC_wEnvVars),
               method="glm",
               formula = y~x,
+              se = TRUE,
               method.args = list(family = Gamma(link = 'log')))+
+  geom_ribbon(aes(x = yearSample, ymin = lwr, ymax = upr), fill = "#C6DBEF", alpha = 0.2) +  # Confidence interval
   scale_colour_viridis_c(option="inferno", direction = -1) +
   facet_wrap(~lakeTrophicStatus, labeller = labeller(lakeTrophicStatus = function(x) str_to_title(x)))+
   ylim(c(0,21)) +
@@ -521,12 +542,27 @@ newdata_sec$predictedSecchi_wEnvVars = predict(secchiSpatial_catTrophicStatus,
                                         newdata = newdata_sec,
                                         type = "response", re.form = NA)
 
+# Need 95%CIs to plot; function to predict from bootstrapped models
+bootFun_sec <- function(model) {
+  predict(model, newdata = newdata_sec, type = "response", re.form = NA)
+}
+
+# Perform bootstrapping (adjust nsim for precision vs. speed)
+bootResults_sec <- bootMer(secchiSpatial_catTrophicStatus, FUN = bootFun_sec, nsim = 10, re.form = NA)
+
+# Compute confidence intervals
+newdata_sec$predictedSecchi_wEnvVars <- predict(secchiSpatial_catTrophicStatus, newdata = newdata_sec, type = "response", re.form = NA)
+newdata_sec$lwr <- apply(bootResults_sec$t, 2, quantile, probs = 0.025)  # 2.5% CI
+newdata_sec$upr <- apply(bootResults_sec$t, 2, quantile, probs = 0.975)  # 97.5% CI
+
+
 pSpatialSecBsM <- ggplot(newdata_sec)+
   geom_jitter(data = mainDF_onlyBsM, aes(y=secchiDepth, x=yearSample, colour=lat), alpha=0.3, size=2, width=0.22)+
   geom_smooth(aes(x=yearSample, y = predictedSecchi_wEnvVars),
               method="glm",
               formula = y~x,
               method.args = list(family = Gamma(link = 'log')))+
+  geom_ribbon(aes(x = yearSample, ymin = lwr, ymax = upr), fill = "#C6DBEF", alpha = 0.2) +  # Confidence interval
   scale_colour_viridis_c(option="inferno", direction = -1) +
   facet_wrap(~lakeTrophicStatus, labeller = labeller(lakeTrophicStatus = function(x) str_to_title(x)))+
   scale_x_continuous(name="Year")+
@@ -704,7 +740,7 @@ pDOCtimeDiff <- ggplot() +
   ylim(c(42.5,55)) +
   labs(y="Latitude",x="Longitude",fill="Δ DOC (mg/L)",size="Sample period (years)") +
   theme_DOC() +
-  theme(legend.position = "none")
+  theme(legend.position = "right")
 pDOCtimeDiff
 
 ## Map of Secchi, including AHI
@@ -720,7 +756,7 @@ pSecchitimeDiff <- ggplot() +
   ylim(c(42.5,55)) +
   labs(y="Latitude",x="Longitude",fill="Δ Secchi depth (m)",size="Sample period (years)") +
   theme_DOC() +
-  theme(legend.position = "none")
+  theme(legend.position = "right")
 pSecchitimeDiff
 
 waterClar_panelPlot <- pDOC_allData_time+pSecchi_allData_time+pDOCtimeDiff+pSecchitimeDiff + plot_layout(heights = c(1.5,2))
@@ -821,4 +857,39 @@ sumSec_timeAll <- lineData_secAll %>%
             diffPerDecade = (diffSec/yearDiff)*10)
 
 
+
+## Histogram of lake size and trophic statuses
+histSize <- ggplot(ontario_ohnWaterbody_latlon) +
+  #geom_histogram(aes(x=SYSTEM_CALCULATED_AREA))
+  geom_histogram(aes(x=(SYSTEM_CALCULATED_AREA/10000))) +
+  scale_x_log10(labels = scales::label_number()) +  # Removes scientific notation  theme_minimal()
+  xlab("Surface area (ha)") +
+  ylab("Frequency") +
+  theme_DOC() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~geoRegion)
+histSize
+
+histSize <- ggplot(ontario_ohnWaterbody_latlon) +
+  #geom_histogram(aes(x=SYSTEM_CALCULATED_AREA))
+  geom_histogram(aes(x=(SYSTEM_CALCULATED_AREA/10000))) +
+  scale_x_log10(labels = scales::label_number()) +  # Removes scientific notation  theme_minimal()
+  xlab("Surface area (ha)") +
+  ylab("Frequency") +
+  theme_DOC() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~geoRegion)
+histSize
+
+mainDF_onlyBsM_wSA <- mainDF_onlyBsM %>% 
+  left_join(select(statDat_wide,commonID,surfaceArea)) %>% 
+  distinct()
+
+histTrophicStatus_loc <- ggplot(mainDF_onlyBsM_wSA) +
+  geom_histogram(aes(x=surfaceArea)) +
+  facet_wrap(~lakeTrophicStatus) +
+  scale_x_log10(labels = scales::label_number()) +  # Removes scientific notation  theme_minimal()
+  theme_DOC() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+histTrophicStatus_loc
 

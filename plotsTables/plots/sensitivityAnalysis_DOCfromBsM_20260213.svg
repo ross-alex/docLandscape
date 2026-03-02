@@ -1,0 +1,69 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' class='svglite' width='576.00pt' height='432.00pt' viewBox='0 0 576.00 432.00'>
+<defs>
+  <style type='text/css'><![CDATA[
+    .svglite line, .svglite polyline, .svglite polygon, .svglite path, .svglite rect, .svglite circle {
+      fill: none;
+      stroke: #000000;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-miterlimit: 10.00;
+    }
+    .svglite text {
+      white-space: pre;
+    }
+  ]]></style>
+</defs>
+<rect width='100%' height='100%' style='stroke: none; fill: #FFFFFF;'/>
+<defs>
+  <clipPath id='cpMC4wMHw1NzYuMDB8MC4wMHw0MzIuMDA='>
+    <rect x='0.00' y='0.00' width='576.00' height='432.00' />
+  </clipPath>
+</defs>
+<g clip-path='url(#cpMC4wMHw1NzYuMDB8MC4wMHw0MzIuMDA=)'>
+<rect x='0.000000000000064' y='0.00' width='576.00' height='432.00' style='stroke-width: 1.07; stroke: none; fill: #FFFFFF;' />
+</g>
+<defs>
+  <clipPath id='cpMTA4LjYyfDQzMi44MHwyMi40MXwzODguODI='>
+    <rect x='108.62' y='22.41' width='324.18' height='366.40' />
+  </clipPath>
+</defs>
+<g clip-path='url(#cpMTA4LjYyfDQzMi44MHwyMi40MXwzODguODI=)'>
+<polyline points='163.15,388.82 163.15,22.41 ' style='stroke-width: 0.43; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='237.06,388.82 237.06,22.41 ' style='stroke-width: 0.43; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='310.97,388.82 310.97,22.41 ' style='stroke-width: 0.43; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='384.89,388.82 384.89,22.41 ' style='stroke-width: 0.43; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='108.62,205.62 432.80,205.62 ' style='stroke-width: 1.07; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='126.19,388.82 126.19,22.41 ' style='stroke-width: 1.07; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='200.11,388.82 200.11,22.41 ' style='stroke-width: 1.07; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='274.02,388.82 274.02,22.41 ' style='stroke-width: 1.07; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='347.93,388.82 347.93,22.41 ' style='stroke-width: 1.07; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='421.84,388.82 421.84,22.41 ' style='stroke-width: 1.07; stroke: #EBEBEB; stroke-linecap: butt;' />
+<line x1='123.36' y1='164.90' x2='298.60' y2='164.90' style='stroke-width: 1.07; stroke: #619CFF; stroke-linecap: butt;' />
+<line x1='222.32' y1='205.62' x2='418.07' y2='205.62' style='stroke-width: 1.07; stroke: #00BA38; stroke-linecap: butt;' />
+<line x1='198.91' y1='246.33' x2='330.06' y2='246.33' style='stroke-width: 1.07; stroke: #F8766D; stroke-linecap: butt;' />
+<circle cx='210.98' cy='164.90' r='1.63' style='stroke-width: 0.71; stroke: #619CFF; fill: #619CFF;' />
+<circle cx='320.19' cy='205.62' r='1.63' style='stroke-width: 0.71; stroke: #00BA38; fill: #00BA38;' />
+<circle cx='264.48' cy='246.33' r='1.63' style='stroke-width: 0.71; stroke: #F8766D; fill: #F8766D;' />
+<line x1='274.02' y1='388.82' x2='274.02' y2='22.41' style='stroke-width: 1.07; stroke-dasharray: 5.69,5.69; stroke-linecap: butt;' />
+</g>
+<g clip-path='url(#cpMC4wMHw1NzYuMDB8MC4wMHw0MzIuMDA=)'>
+<polyline points='108.62,388.82 108.62,22.41 ' style='stroke-width: 0.00; stroke-linecap: butt;' />
+<text x='103.69' y='210.64' text-anchor='end' style='font-size: 14.00px; font-family: "Arial";' textLength='78.58px' lengthAdjust='spacingAndGlyphs'>Year sample</text>
+<polyline points='108.62,388.82 432.80,388.82 ' style='stroke-width: 0.00; stroke-linecap: butt;' />
+<text x='126.19' y='403.79' text-anchor='middle' style='font-size: 14.00px; font-family: "Arial";' textLength='47.47px' lengthAdjust='spacingAndGlyphs'>-0.0050</text>
+<text x='200.11' y='403.79' text-anchor='middle' style='font-size: 14.00px; font-family: "Arial";' textLength='47.47px' lengthAdjust='spacingAndGlyphs'>-0.0025</text>
+<text x='274.02' y='403.79' text-anchor='middle' style='font-size: 14.00px; font-family: "Arial";' textLength='42.80px' lengthAdjust='spacingAndGlyphs'>0.0000</text>
+<text x='347.93' y='403.79' text-anchor='middle' style='font-size: 14.00px; font-family: "Arial";' textLength='42.80px' lengthAdjust='spacingAndGlyphs'>0.0025</text>
+<text x='421.84' y='403.79' text-anchor='middle' style='font-size: 14.00px; font-family: "Arial";' textLength='42.80px' lengthAdjust='spacingAndGlyphs'>0.0050</text>
+<text x='270.71' y='422.54' text-anchor='middle' style='font-size: 18.00px; font-family: "Arial";' textLength='164.06px' lengthAdjust='spacingAndGlyphs'>Estimate (Log scale)</text>
+<text x='449.24' y='181.98' style='font-size: 14.00px; font-family: "Arial";' textLength='85.59px' lengthAdjust='spacingAndGlyphs'>Model Subset</text>
+<circle cx='457.88' cy='197.65' r='1.63' style='stroke-width: 0.71; stroke: #619CFF; fill: #619CFF;' />
+<circle cx='457.88' cy='214.93' r='1.63' style='stroke-width: 0.71; stroke: #00BA38; fill: #00BA38;' />
+<circle cx='457.88' cy='232.21' r='1.63' style='stroke-width: 0.71; stroke: #F8766D; fill: #F8766D;' />
+<text x='472.00' y='201.95' style='font-size: 12.00px; font-family: "Arial";' textLength='89.72px' lengthAdjust='spacingAndGlyphs'>Robust (n = 113)</text>
+<text x='472.00' y='219.23' style='font-size: 12.00px; font-family: "Arial";' textLength='89.72px' lengthAdjust='spacingAndGlyphs'>Sparse (n = 330)</text>
+<text x='472.00' y='236.51' style='font-size: 12.00px; font-family: "Arial";' textLength='93.04px' lengthAdjust='spacingAndGlyphs'>Original (n = 684)</text>
+<text x='108.62' y='14.45' style='font-size: 18.00px; font-weight: bold; font-family: "Arial";' textLength='209.04px' lengthAdjust='spacingAndGlyphs'>a) Effect of Year on DOC</text>
+</g>
+</svg>
